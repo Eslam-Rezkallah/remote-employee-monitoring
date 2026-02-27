@@ -1,4 +1,4 @@
-import axios from "axios";  //lib that can talk to googles services 
+import axios from "axios"; //lib that can talk to googles services
 import { OAuth2Client } from "google-auth-library";
 import userModel, {
   providerTypes,
@@ -83,55 +83,51 @@ const checkBanAndOTPStatus = async (user, otpType) => {
 };
 // login with email password
 export const login = asyncHandler(async (req, res, next) => {
-  const {email,password } = req.body;
+  const { email, password } = req.body;
   if (!email || !password) {
     return next(new Error("Email and password are required", { cause: 400 }));
   }
 
-  const  user = await dbService.findOne({
+  const user = await dbService.findOne({
+    model: userModel,
+    filter: {
+      email,
+      provider: providerTypes.System,
+    },
+  });
+
+  if (!user) {
+    const existingUser = await dbService.findOne({
       model: userModel,
-      filter: {
-        email,
-        provider: providerTypes.System,
-      },
+      filter: { email },
     });
-
-    if (!user) {
-      const existingUser = await dbService.findOne({
-        model: userModel,
-        filter: { email },
-      });
-      if (existingUser) {
-        return next(
-          new Error(
-            "Account registered with another provider (e.g., Google).",
-            {
-              cause: 401,
-            },
-          ),
-        );
-      } else {
-        return next(new Error("Invalid credentials", { cause: 401 }));
-      }
-    }
-
-    if (!user.confirmEmail) {
-      return next(new Error("Email not confirmed", { cause: 401 }));
-    }
-
-    if (!compareHash({ plainText: password, hashValue: user.password })) {
+    if (existingUser) {
+      return next(
+        new Error("Account registered with another provider (e.g., Google).", {
+          cause: 401,
+        }),
+      );
+    } else {
       return next(new Error("Invalid credentials", { cause: 401 }));
     }
-    // Check if two-step verification is enabled
-    if (user.twoStepVerification) {
-      emailEvent.emit("twoStepVerification", { id: user._id, email });
-      return successResponse(
-        { res, data: { requiresOTP: true } }, // go validate OTP
-        200,
-      );
-    }
-    
-  
+  }
+
+  if (!user.confirmEmail) {
+    return next(new Error("Email not confirmed", { cause: 401 }));
+  }
+
+  if (!compareHash({ plainText: password, hashValue: user.password })) {
+    return next(new Error("Invalid credentials", { cause: 401 }));
+  }
+  // Check if two-step verification is enabled
+  if (user.twoStepVerification) {
+    emailEvent.emit("twoStepVerification", { id: user._id, email });
+    return successResponse(
+      { res, data: { requiresOTP: true } }, // go validate OTP
+      200,
+    );
+  }
+
   const { accessToken, refreshToken } = await createSession({ user, req });
 
   return successResponse(
@@ -146,7 +142,7 @@ export const login = asyncHandler(async (req, res, next) => {
   );
 });
 
-////////////////////////////////////////////////////////////////////////front end way 
+////////////////////////////////////////////////////////////////////////front end way
 // export const loginWithGmail = asyncHandler(async (req, res, next) => {
 //   const { idToken } = req.body; // Sent from frontend (Flutter/React/etc.)
 //   if (!idToken) return next(new Error("idToken is required", { cause: 400 }));
@@ -208,85 +204,87 @@ export const login = asyncHandler(async (req, res, next) => {
 //   return successResponse({ res, data: { accessToken } }, 200);
 // });
 
-
-
 /////////////////////////////////////////////////////////////////////////////////////////////////backend test , @eslam remove when adding frontend to google oauth
 // STEP 1: This is what triggers when you visit /auth/loginWithGmail in the browser
 export const loginWithGmail = asyncHandler(async (req, res, next) => {
-    const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
-    const options = {
-        redirect_uri: process.env.GOOGLE_CALLBACK_URL,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        access_type: "offline",
-        response_type: "code",
-        prompt: "consent",
-        scope: [
-            "https://www.googleapis.com/auth/userinfo.profile",
-            "https://www.googleapis.com/auth/userinfo.email",
-        ].join(" "),
-    };
+  const rootUrl = "https://accounts.google.com/o/oauth2/v2/auth";
+  const options = {
+    redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    access_type: "offline",
+    response_type: "code",
+    prompt: "consent",
+    scope: [
+      "https://www.googleapis.com/auth/userinfo.profile",
+      "https://www.googleapis.com/auth/userinfo.email",
+    ].join(" "),
+  };
 
-    const queryString = new URLSearchParams(options).toString();
-    return res.redirect(`${rootUrl}?${queryString}`);
+  const queryString = new URLSearchParams(options).toString();
+  return res.redirect(`${rootUrl}?${queryString}`);
 });
 
 // STEP 2: This is what Google calls after the user logs in
 export const googleCallback = asyncHandler(async (req, res, next) => {
-    const { code } = req.query; // Google sends a temporary 'code'
+  const { code } = req.query; // Google sends a temporary 'code'
 
-    if (!code) {
-        return next(new Error("Google authorization failed", { cause: 400 }));
-    }
+  if (!code) {
+    return next(new Error("Google authorization failed", { cause: 400 }));
+  }
 
-    // A. Exchange the 'code' for an access token
-    const { data } = await axios.post("https://oauth2.googleapis.com/token", {
-        code,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: process.env.GOOGLE_CALLBACK_URL,
-        grant_type: "authorization_code",
+  // A. Exchange the 'code' for an access token
+  const { data } = await axios.post("https://oauth2.googleapis.com/token", {
+    code,
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECRET,
+    redirect_uri: process.env.GOOGLE_CALLBACK_URL,
+    grant_type: "authorization_code",
+  });
+
+  // B. Get the user info from Google using that token
+  const { data: googleUser } = await axios.get(
+    `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${data.access_token}`,
+  );
+
+  // C. Find or Create the user (Reuse your existing database logic)
+  let user = await dbService.findOne({
+    model: userModel,
+    filter: { email: googleUser.email },
+  });
+
+  if (!user) {
+    user = await dbService.create({
+      model: userModel,
+      data: {
+        username: googleUser.name,
+        email: googleUser.email,
+        image: { secure_url: googleUser.picture },
+        confirmEmail: googleUser.email_verified,
+        provider: providerTypes.Google,
+        role: roleTypes.Member,
+      },
     });
+  }
 
-    // B. Get the user info from Google using that token
-    const { data: googleUser } = await axios.get(
-        `https://www.googleapis.com/oauth2/v3/userinfo?access_token=${data.access_token}`
+  // D. Security Check (Reuse your existing provider check)
+  if (user.provider !== providerTypes.Google) {
+    return next(
+      new Error("This email is registered via another provider.", {
+        cause: 409,
+      }),
     );
+  }
 
-    // C. Find or Create the user (Reuse your existing database logic)
-    let user = await dbService.findOne({
-        model: userModel,
-        filter: { email: googleUser.email },
-    });
+  // E. Handle 2FA (Reuse your existing logic)
+  if (user.twoStepVerification) {
+    emailEvent.emit("twoStepVerification", { id: user._id, email: user.email });
+    return successResponse({ res, data: { requiresOTP: true } }, 200);
+  }
 
-    if (!user) {
-        user = await dbService.create({
-            model: userModel,
-            data: {
-                username: googleUser.name,
-                email: googleUser.email,
-                image: { secure_url: googleUser.picture },
-                confirmEmail: googleUser.email_verified,
-                provider: providerTypes.Google,
-                role: roleTypes.Member
-            },
-        });
-    }
+  // F. Create session and respond
+  const { accessToken, refreshToken } = await createSession({ user, req });
 
-    // D. Security Check (Reuse your existing provider check)
-    if (user.provider !== providerTypes.Google) {
-        return next(new Error("This email is registered via another provider.", { cause: 409 }));
-    }
-
-    // E. Handle 2FA (Reuse your existing logic)
-    if (user.twoStepVerification) {
-        emailEvent.emit("twoStepVerification", { id: user._id, email: user.email });
-        return successResponse({ res, data: { requiresOTP: true } }, 200);
-    }
-
-    // F. Create session and respond
-    const { accessToken, refreshToken } = await createSession({ user, req });
-
-    return successResponse({ res, data: { accessToken, refreshToken } }, 200);
+  return successResponse({ res, data: { accessToken, refreshToken } }, 200);
 });
 /////////////////////////////////////////////////////////////////////////////////////////////////backend test , @eslam remove when adding frontend to google oauth
 export const validateLoginOTP = asyncHandler(async (req, res, next) => {
@@ -355,7 +353,6 @@ export const validateLoginOTP = asyncHandler(async (req, res, next) => {
 
   return successResponse({ res, data: { accessToken, refreshToken } }, 200);
 });
-
 
 export const verifyEnableTwoStepVerification = asyncHandler(
   async (req, res, next) => {
@@ -566,4 +563,59 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
     },
   });
   return successResponse({ res, message: "Password reset successful" }, 200);
+});
+
+export const refreshToken = asyncHandler(async (req, res, next) => {
+  const { authorization } = req.headers;
+
+  const user = await decodedToken({
+    authorization,
+    tokenType: tokenTypes.refresh,
+    next,
+  });
+
+  if (!user) {
+    return next(
+      new Error("User not found or token is invalid", { cause: 401 }),
+    );
+  }
+
+  const dbUser = await dbService.findOne({
+    model: userModel,
+    filter: { _id: user._id },
+  });
+
+  if (!dbUser) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  if (user.iat * 1000 < dbUser.changeCredentialsTime) {
+    return next(
+      new Error("Refresh token is invalid. Please log in again.", {
+        cause: 401,
+      }),
+    );
+  }
+
+  const accessToken = generateToken({
+    payload: { id: user._id },
+    signature:
+      user.role === roleTypes.admin
+        ? process.env.ADMIN_ACCESS_TOKEN
+        : process.env.USER_ACCESS_TOKEN,
+  });
+
+  const refreshToken = generateToken({
+    payload: { id: user._id },
+    signature:
+      user.role === roleTypes.admin
+        ? process.env.ADMIN_REFRESH_TOKEN
+        : process.env.USER_REFRESH_TOKEN,
+    expiresIn: 31536000,
+  });
+
+  return successResponse(
+    { res, data: { token: { accessToken, refreshToken } } },
+    200,
+  );
 });

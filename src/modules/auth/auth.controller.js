@@ -72,7 +72,7 @@ router.post(
   validation(validators.joinOrganization),
   organizationService.joinOrganizationController
 );
-
+router.post("/refresh-token", loginService.refreshToken);
 // ── Session Management (BE-2.2) ───────────────────────────────────────────────
 
 // Exchange a refresh token for a new access token

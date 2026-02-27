@@ -3,7 +3,7 @@ import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-import { getPagination } from "../../../utils/db/pagination.js";
+import { paginate } from "../../../utils/security/pagination.js";
 
 async function requireOrgMember(orgId, userId) {
   const member = await dbService.findOne({
@@ -36,7 +36,7 @@ export const updateDueDate = asyncHandler(async (req, res, next) => {
 export const listTasks = asyncHandler(async (req, res) => {
   const { orgId, spaceId } = req.params;
 
-  const { page, limit, skip } = getPagination(req.query);
+  const { page, limit, skip } = paginate(req.query);
 
   const filter = {
     organizationId: orgId,

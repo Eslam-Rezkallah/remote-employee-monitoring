@@ -1,6 +1,6 @@
 import chatModel from "../../../DB/model/chat.model.js";
 import companyModel from "../../../DB/model/company.model.js";
-import { socketConnection } from "../../../DB/model/user.model.js";
+import { socketConnection } from "../../../DB/Model/user.model"
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
 import * as dbService from "../../../DB/db.service.js";
 

@@ -1,24 +1,59 @@
-import { socketConnection } from "../../../DB/model/user.model.js";
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
+import {
+  addOnlineUser,
+  removeOnlineUser,
+  getOnlineUserIds,
+  getUserSocketIds,
+} from "./store/onlineUsers.store.js";
 
-export const registerSocket = async (socket) => {
+/**
+ * Register socket connection - adds user to online store and joins their rooms
+ */
+export const registerSocket = async (io, socket) => {
   const { data, valid } = await authentication({ socket });
+
   if (!valid) {
-    return socket.emit("socket_Error", data);
+    return socket.emit("socket_error", data);
   }
-  socketConnection.set(data?.user?._id?.toString(), socket.id);
 
-  return "done";
+  const userId = data.user._id.toString();
+  addOnlineUser(userId, socket.id);
+
+  // Store user info on socket for later use
+  socket.userId = userId;
+  socket.user = data.user;
+
+  // Join personal room (for direct notifications)
+  socket.join(`user:${userId}`);
+
+  // Notify others that this user is online
+  socket.broadcast.emit("user:online", { userId });
+
+  // Send current online users to the newly connected user
+  socket.emit("users:online", { onlineUsers: getOnlineUserIds() });
+
+  console.log(`✅ User ${userId} connected with socket ${socket.id}`);
 };
-export const logoutSocketId = async (socket) => {
-  return socket.on("disconnect", async () => {
-    const { data, valid } = await authentication({ socket });
 
-    if (!valid) {
-      return socket.emit("socket_Error", data);
+/**
+ * Handle socket disconnect
+ */
+export const handleDisconnect = (io, socket) => {
+  socket.on("disconnect", () => {
+    if (!socket.userId) return;
+
+    removeOnlineUser(socket.userId, socket.id);
+
+    // Check if user still has other active connections
+    const remainingSockets = getUserSocketIds(socket.userId);
+    if (remainingSockets.length === 0) {
+      // User fully offline - notify others
+      socket.broadcast.emit("user:offline", {
+        userId: socket.userId,
+        lastSeen: new Date(),
+      });
     }
-    socketConnection.delete(data?.user?._id?.toString());
 
-    return "done";
+    console.log(`❌ User ${socket.userId} disconnected socket ${socket.id}`);
   });
 };

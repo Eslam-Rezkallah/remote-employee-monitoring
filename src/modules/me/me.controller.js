@@ -21,6 +21,13 @@ router.get(
 );
 
 router.get(
+  "/tasks/team",
+  authentication(),
+  validation(validators.teamTasks),
+  meService.teamTasks
+);
+
+router.get(
   "/for-you",
   authentication(),
   validation(validators.forYou),

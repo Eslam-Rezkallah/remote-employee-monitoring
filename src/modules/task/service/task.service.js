@@ -8,7 +8,7 @@ import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-import { paginate } from "../../../utils/security/pagination.js";
+import { getPagination } from "../../../utils/db/pagination.js";
 import { logActivity } from "../../../utils/activity/activity.logger.js";
 
 /* =========================
@@ -72,7 +72,8 @@ export const createTask = asyncHandler(async (req, res, next) => {
   });
 
   // Activity log (create)
-  await logActivity({
+  const track = req.logActivity || logActivity;
+  await track({
     actorId: req.user._id,
     orgId,
     spaceId,
@@ -96,7 +97,7 @@ export const listTasks = asyncHandler(async (req, res, next) => {
   await requireOrgMember(orgId, req.user._id);
   await requireSpace(spaceId, orgId);
 
-  const { page, limit, skip } = paginate(req.query);
+  const { page, limit, skip } = getPagination(req.query);
 
   const filter = {
     organizationId: orgId,
@@ -130,7 +131,7 @@ export const listTasks = asyncHandler(async (req, res, next) => {
     : { updatedAt: -1 };
 
   const query = Task.find(filter).select(
-    "title status priority assigneeId reporterId sprintId points dueDate updatedAt createdAt",
+    "title status priority assigneeId reporterId sprintId points dueDate updatedAt createdAt"
   );
 
   if (hasSearch) {
@@ -151,7 +152,7 @@ export const backlog = asyncHandler(async (req, res, next) => {
   await requireOrgMember(orgId, req.user._id);
   await requireSpace(spaceId, orgId);
 
-  const { page, limit, skip } = paginate(req.query);
+  const { page, limit, skip } = getPagination(req.query);
 
   const filter = {
     organizationId: orgId,

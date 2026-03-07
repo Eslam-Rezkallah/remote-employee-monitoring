@@ -54,7 +54,8 @@ export const createSprint = asyncHandler(async (req, res, next) => {
   });
 
   // ✅ LOG ACTIVITY AFTER SUCCESSFUL CREATE
-  await logActivity({
+  const track = req.logActivity || logActivity;
+  await track({
     actorId: req.user._id,
     orgId,
     spaceId,
@@ -108,7 +109,8 @@ export const updateSprintStatus = asyncHandler(async (req, res, next) => {
   );
 
   // ✅ LOG ACTIVITY AFTER STATUS UPDATE
-  await logActivity({
+  const track = req.logActivity || logActivity;
+  await track({
     actorId: req.user._id,
     orgId: updated.organizationId,
     spaceId: updated.spaceId,

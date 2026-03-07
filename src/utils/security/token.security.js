@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
 import userModel, { roleTypes } from "../../DB/Model/user.model.js";
-import sessionModel from "../../DB/Model/session.model.js";
 import * as dbService from "../../DB/db.service.js";
 
 export const tokenTypes = {
@@ -26,12 +25,12 @@ export const decodedToken = async ({
     case "Bearer":
       access_signature = process.env.USER_ACCESS_TOKEN;
       refresh_signature = process.env.USER_REFRESH_TOKEN;
-      allowedRoles = [roleTypes.Admin, roleTypes.Manager, roleTypes.Member];
+      allowedRoles = [roleTypes.Member, roleTypes.Manager];
       break;
     case "System":
       access_signature = process.env.ADMIN_ACCESS_TOKEN;
       refresh_signature = process.env.ADMIN_REFRESH_TOKEN;
-      allowedRoles = [roleTypes.admin, roleTypes.superAdmin];
+      allowedRoles = [roleTypes.Admin];
       break;
     default:
       return next(new Error("Invalid token type", 401));
@@ -64,35 +63,6 @@ export const decodedToken = async ({
     return next(
       new Error("Credentials changed. Please log in again.", { cause: 401 })
     );
-  }
-
-  // ── Session validation ──────────────────────────────────────────────────────
-  // We embed sessionType in the payload when generating tokens.
-  // Only access tokens (sessionType === "access") are used for protected routes.
-  if (decoded.sessionType && decoded.sessionType !== "access") {
-    return next(new Error("Invalid token type for this request", { cause: 401 }));
-  }
-
-  // If the token was issued after session management was added it will have
-  // a sessionType field. Validate that the user still has at least one active
-  // (non-revoked, non-expired) session — prevents using tokens after logout.
-  if (decoded.sessionType === "access") {
-    const activeSession = await dbService.findOne({
-      model: sessionModel,
-      filter: {
-        userId: user._id,
-        isRevoked: false,
-        expiresAt: { $gt: new Date() },
-      },
-    });
-
-    if (!activeSession) {
-      return next(
-        new Error("Session expired or logged out. Please log in again.", {
-          cause: 401,
-        })
-      );
-    }
   }
 
   return user;

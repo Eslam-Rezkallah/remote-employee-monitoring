@@ -7,7 +7,11 @@ export const isValidObjectId = (value, helper) => {
 };
 export const validation = (Schema) => {
   return (req, res, next) => {
-    const inputs = { ...req.query, ...req.body, ...req.params };
+    const method = String(req.method || "GET").toUpperCase();
+    const hasBody = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    const inputs = hasBody
+      ? { ...req.query, ...req.body, ...req.params }
+      : { ...req.query, ...req.params };
     if (req.file || req.files?.length) {
       inputs.file = req.file || req.files;
     }

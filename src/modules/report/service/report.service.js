@@ -189,3 +189,147 @@ export const burndown = asyncHandler(async (req, res, next) => {
   cache.set(key, payload);
   return successResponse({ res, data: payload }, 200);
 });
+
+// =========================
+// BE-8.2 Burnup (Phase 9 optimized + cached)
+// =========================
+// Output: array of { date, scope, completed }
+export const burnup = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId, sprintId } = req.params;
+
+  await requireOrgMember(orgId, req.user._id);
+
+  const key = cacheKey(["burnup", orgId, spaceId, sprintId]);
+  const cached = cache.get(key);
+  if (cached) return successResponse({ res, data: cached }, 200);
+
+  const sprint = await dbService.findOne({
+    model: Sprint,
+    filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
+  });
+  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+
+  const days = eachDayInclusive(sprint.startDate, sprint.endDate);
+
+  const allSprintTasks = await Task.find({
+    organizationId: orgId,
+    spaceId,
+    sprintId,
+    isDeleted: false,
+  })
+    .select("status createdAt updatedAt")
+    .lean();
+
+  const tasksLite = allSprintTasks.map((t) => ({
+    status: t.status,
+    createdAt: new Date(t.createdAt).getTime(),
+    updatedAt: new Date(t.updatedAt).getTime(),
+  }));
+
+  const series = days.map((day) => {
+    const dayEndTs = endOfDay(day).getTime();
+
+    let scope = 0;
+    let completed = 0;
+
+    for (const t of tasksLite) {
+      if (t.createdAt <= dayEndTs) scope++;
+      if (t.status === "Done" && t.updatedAt <= dayEndTs) completed++;
+    }
+
+    return {
+      date: day.toISOString().slice(0, 10),
+      scope,
+      completed,
+    };
+  });
+
+  const payload = {
+    sprint: {
+      id: sprint._id,
+      name: sprint.name,
+      startDate: sprint.startDate,
+      endDate: sprint.endDate,
+    },
+    series,
+  };
+
+  cache.set(key, payload);
+  return successResponse({ res, data: payload }, 200);
+});
+
+// =========================
+// BE-8.5 Cumulative Flow (Phase 9 optimized + cached)
+// =========================
+// Output: array of { date, todo, inProgress, done, scope }
+export const cumulativeFlow = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId, sprintId } = req.params;
+
+  await requireOrgMember(orgId, req.user._id);
+
+  const key = cacheKey(["cumulativeFlow", orgId, spaceId, sprintId]);
+  const cached = cache.get(key);
+  if (cached) return successResponse({ res, data: cached }, 200);
+
+  const sprint = await dbService.findOne({
+    model: Sprint,
+    filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
+  });
+  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+
+  const days = eachDayInclusive(sprint.startDate, sprint.endDate);
+
+  const allSprintTasks = await Task.find({
+    organizationId: orgId,
+    spaceId,
+    sprintId,
+    isDeleted: false,
+  })
+    .select("status createdAt updatedAt")
+    .lean();
+
+  const tasksLite = allSprintTasks.map((t) => ({
+    status: t.status,
+    createdAt: new Date(t.createdAt).getTime(),
+    updatedAt: new Date(t.updatedAt).getTime(),
+  }));
+
+  const series = days.map((day) => {
+    const dayEndTs = endOfDay(day).getTime();
+
+    let scope = 0;
+    let done = 0;
+    let inProgress = 0;
+
+    for (const t of tasksLite) {
+      if (t.createdAt <= dayEndTs) scope++;
+      if (t.updatedAt > dayEndTs) continue;
+
+      if (t.status === "Done") done++;
+      else if (t.status === "InProgress") inProgress++;
+    }
+
+    const todo = Math.max(scope - done - inProgress, 0);
+
+    return {
+      date: day.toISOString().slice(0, 10),
+      todo,
+      inProgress,
+      done,
+      scope,
+    };
+  });
+
+  const payload = {
+    sprint: {
+      id: sprint._id,
+      name: sprint.name,
+      startDate: sprint.startDate,
+      endDate: sprint.endDate,
+    },
+    series,
+  };
+
+  cache.set(key, payload);
+  return successResponse({ res, data: payload }, 200);
+});

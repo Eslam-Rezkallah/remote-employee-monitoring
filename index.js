@@ -1,8 +1,17 @@
-import bootstrap from "./src/App.controller.js";
 import path from "path";
+import { fileURLToPath } from "url";
 import express from "express";
 import * as dotenv from "dotenv";
-dotenv.config({ path: path.resolve("./src/config/.env.dev") });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load env files relative to this index.js location (not process cwd).
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config({ path: path.join(__dirname, "src", "config", ".env.dev") });
+
+const { default: bootstrap } = await import("./src/App.controller.js");
+
 const app = express();
 const port = process.env.PORT;
 

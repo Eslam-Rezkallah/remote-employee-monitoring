@@ -1,5 +1,6 @@
 import authController from "./modules/auth/auth.controller.js";
 import userController from "./modules/user/user.controller.js";
+import organizationController from "./modules/organization/organization.controller.js";
 import taskController from "./modules/task/task.controller.js";
 import sprintStatusController from "./modules/sprint/sprint.status.controller.js";
 import meController from "./modules/me/me.controller.js";
@@ -10,7 +11,6 @@ import cors from "cors";
 import path from "node:path";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
-
 const generalLimiter = rateLimit({
   limit: 200,
   windowMs: 2 * 60 * 1000,
@@ -29,19 +29,23 @@ const authLimiter = rateLimit({
   message: "Too many authentication attempts, please try again later.",
 });
 
-
+const postLimiter = rateLimit({
+  limit: 100,
+  windowMs: 2 * 60 * 1000,
+});
 export const bootstrap = async (app, express) => {
 
-
+  app.use("/post", postLimiter);
   app.use("/auth", authLimiter);
-  app.use(cors()); // cors options can be added as needed, currently allowing all origins
-  app.use(helmet()); // for setting various HTTP headers for security hardening
-  app.use(generalLimiter); 
+  app.use(cors()); // cors options can be added
+  app.use(helmet());
+  app.use(generalLimiter);
 
   app.use("/uploads", express.static(path.resolve("./src/uploads")));
   app.use(express.json());
   app.use("/auth", authController);
   app.use("/user", userController);
+  app.use("/org", organizationController);
   //app.use("/task", taskController);
   app.use("/sprints", sprintStatusController);
   app.use("/me", meController);

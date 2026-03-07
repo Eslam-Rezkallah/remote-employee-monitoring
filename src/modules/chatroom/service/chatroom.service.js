@@ -1,9 +1,8 @@
-import chatRoomModel from "../../../DB/model/chatRoom.model.js";
-import userModel from "../../../DB/model/user.model.js";
-import teamModel from "../../../DB/model/team.model.js";
-import projectModel from "../../../DB/model/project.model.js";
-import { authentication } from "../../../middleware/socket/auth.middleware.js";
-import { isUserOnline } from "./store/onlineUsers.store.js";
+import chatRoomModel from "../../../DB/Model/chatroom.model.js";
+import userModel from "../../../DB/Model/user.model.js";
+import teamModel from "../../../DB/Model/team.model.js";
+import projectModel from "../../../DB/Model/project.model.js";
+import { isUserOnline } from "../../message/service/store/onlineUsers.store.js";
 
 /**
  * Join all rooms the user belongs to on connection

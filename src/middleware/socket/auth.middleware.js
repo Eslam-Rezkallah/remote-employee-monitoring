@@ -1,9 +1,10 @@
 import jwt from "jsonwebtoken";
-import userModel from "../../DB/model/user.model.js";
+import userModel from "../../DB/Model/user.model.js";
 
 /**
  * Socket Authentication Middleware
- * Verifies JWT token from socket handshake and attaches user to socket
+ * Verifies JWT token from socket handshake and attaches user to socket.
+ * Supports tokens signed with USER_ACCESS_TOKEN or ADMIN_ACCESS_TOKEN.
  */
 export const authentication = async ({ socket }) => {
   try {
@@ -18,10 +19,29 @@ export const authentication = async ({ socket }) => {
       };
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    // Try user signature first, then admin signature
+    let decoded = null;
+    for (const signature of [
+      process.env.USER_ACCESS_TOKEN,
+      process.env.ADMIN_ACCESS_TOKEN,
+    ]) {
+      try {
+        decoded = jwt.verify(token, signature);
+        break;
+      } catch (_) {
+        // try next signature
+      }
+    }
+
+    if (!decoded) {
+      return {
+        valid: false,
+        data: { message: "Invalid token", status: 401 },
+      };
+    }
 
     const user = await userModel
-      .findById(decoded._id)
+      .findById(decoded.id)
       .select(
         "-password -confirmEmailOTP -resetPasswordOTP -twoStepVerificationOTP",
       );

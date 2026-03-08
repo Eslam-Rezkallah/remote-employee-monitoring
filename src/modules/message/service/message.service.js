@@ -1,7 +1,7 @@
 import messageModel from "../../../DB/Model/message.model.js";
-import chatRoomModel from "../../../DB/model/chatRoom.model.js";
-import fileModel from "../../../DB/model/file.model.js";
-import { cloud } from "../../../utils/multer/cloudinary.js";
+import chatRoomModel from "../../../DB/Model/chatroom.model.js";
+import fileModel from "../../../DB/Model/file.model.js";
+import { cloud } from "../../../utils/multer/cloudinary.multer.js";
 import { getUserSocketIds } from "./store/onlineUsers.store.js";
 
 // ─────────────────────────────────────────────

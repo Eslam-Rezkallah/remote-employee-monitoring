@@ -4,9 +4,9 @@ import {
   uploadCloudFile,
   fileValidations,
 } from "../../../utils/multer/cloud.multer.js";
-import { cloud } from "../../../utils/multer/cloudinary.js";
-import fileModel from "../../../DB/model/file.model.js";
-import asyncHandler from "../../../utils/response/asyncHandler.js";
+import { cloud } from "../../../utils/multer/cloudinary.multer.js";
+import fileModel from "../../../DB/Model/file.model.js";
+import { asyncHandler } from "../../../utils/response/error.response.js";
 
 const router = Router();
 
@@ -17,7 +17,7 @@ const router = Router();
  */
 router.post(
   "/upload",
-  authentication,
+  authentication(),
   uploadCloudFile([
     ...fileValidations.image,
     ...fileValidations.document,
@@ -66,7 +66,7 @@ router.post(
  */
 router.post(
   "/upload/voice",
-  authentication,
+  authentication(),
   uploadCloudFile([...fileValidations.audio, "audio/webm", "audio/ogg"]).single(
     "voice",
   ),

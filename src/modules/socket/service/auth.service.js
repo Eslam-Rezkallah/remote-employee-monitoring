@@ -4,7 +4,7 @@ import {
   removeOnlineUser,
   getOnlineUserIds,
   getUserSocketIds,
-} from "./store/onlineUsers.store.js";
+} from "../../message/service/store/onlineUsers.store.js";
 
 /**
  * Register socket connection - adds user to online store and joins their rooms

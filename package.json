@@ -1,0 +1,42 @@
+{
+  "name": "remote-employee-monitoring",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node --watch index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@abacritt/angularx-social-login": "^2.3.0",
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^2.5.1",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "express-async-handler": "^1.2.0",
+    "express-rate-limit": "^7.5.0",
+    "firebase-admin": "^13.1.0",
+    "google-auth-library": "^9.15.1",
+    "graphql": "^16.11.0",
+    "graphql-http": "^1.22.4",
+    "graphql-playground-middleware-express": "^1.7.23",
+    "helmet": "^8.1.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "lru-cache": "^11.2.6",
+    "messagebird": "^4.0.1",
+    "mongoose": "^8.10.1",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.12.0",
+    "nanoid": "^5.1.0",
+    "nodemailer": "^6.10.0",
+    "random-otp": "^1.0.2",
+    "socket.io": "^4.8.1",
+    "twilio": "^5.4.5"
+  }
+}

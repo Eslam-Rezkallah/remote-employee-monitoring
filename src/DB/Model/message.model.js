@@ -21,11 +21,13 @@ const messageSchema = new Schema(
 
     attachments: [{ type: Types.ObjectId, ref: "File" }],
 
+
     status: {
       type: String,
       enum: ["sent", "delivered", "seen"],
       default: "sent",
     },
+
 
     replyTo: {
       type: Types.ObjectId,
@@ -38,17 +40,13 @@ const messageSchema = new Schema(
         users: [{ type: Types.ObjectId, ref: "User" }],
       },
     ],
-    // New fields for features
-    isPinned: { type: Boolean, default: false },
-    editedAt: { type: Date },
-    isDeleted: { type: Boolean, default: false },
-    deletedAt: { type: Date },
   },
 
   {
     timestamps: true,
-  },
+  }
 );
+
 
 messageSchema.index({ chatRoom: 1, createdAt: 1 });
 

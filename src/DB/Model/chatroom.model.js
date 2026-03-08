@@ -32,13 +32,12 @@ const chatRoomSchema = new Schema(
         count: { type: Number, default: 0 },
       },
     ],
-    // New field for pinned messages
-    pinnedMessages: [{ type: Types.ObjectId, ref: "Message" }],
   },
   {
     timestamps: true,
-  },
+  }
 );
+
 
 chatRoomSchema.index({ members: 1 });
 

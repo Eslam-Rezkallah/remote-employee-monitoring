@@ -1,5 +1,6 @@
 import authController from "./modules/auth/auth.controller.js";
 import userController from "./modules/user/user.controller.js";
+import chatController from "./modules/chatroom/chat.controller.js";
 import organizationController from "./modules/organization/organization.controller.js";
 import taskController from "./modules/task/task.controller.js";
 import sprintStatusController from "./modules/sprint/sprint.status.controller.js";
@@ -34,7 +35,6 @@ const postLimiter = rateLimit({
   windowMs: 2 * 60 * 1000,
 });
 export const bootstrap = async (app, express) => {
-
   app.use("/post", postLimiter);
   app.use("/auth", authLimiter);
   app.use(cors()); // cors options can be added
@@ -46,6 +46,7 @@ export const bootstrap = async (app, express) => {
   app.use("/auth", authController);
   app.use("/user", userController);
   app.use("/org", organizationController);
+  app.use("/chat", chatController);
   //app.use("/task", taskController);
   app.use("/sprints", sprintStatusController);
   app.use("/me", meController);

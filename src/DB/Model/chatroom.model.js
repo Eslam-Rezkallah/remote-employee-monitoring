@@ -16,6 +16,11 @@ const chatRoomSchema = new Schema(
       type: Types.ObjectId,
       ref: "Project",
     },
+    organization: {
+      type: Types.ObjectId,
+      ref: "Organization",
+      required: true,
+    },
     members: [
       {
         type: Types.ObjectId,
@@ -32,14 +37,27 @@ const chatRoomSchema = new Schema(
         count: { type: Number, default: 0 },
       },
     ],
+    pinnedMessages: [
+      {
+        type: Types.ObjectId,
+        ref: "Message",
+      },
+    ],
+    typingUsers: [
+      {
+        user: { type: Types.ObjectId, ref: "User" },
+        timestamp: { type: Date, default: Date.now },
+      },
+    ],
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-
 chatRoomSchema.index({ members: 1 });
+chatRoomSchema.index({ organization: 1 });
+chatRoomSchema.set("strictPopulate", false);
 
 const chatRoomModel =
   mongoose.models.ChatRoom || model("ChatRoom", chatRoomSchema);

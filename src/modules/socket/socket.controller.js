@@ -6,7 +6,7 @@ import {
   createGroupChat,
   createProjectChat,
   getUserChats,
-} from "../../chatroom/service/chatroom.service.js";
+} from "./service/chatRoom.service.js";
 import {
   sendMessage,
   getMessages,
@@ -19,7 +19,7 @@ import {
   searchMessages,
   threadReply,
   getPinnedMessages,
-} from "../../message/service/message.service.js";
+} from "./service/message.service.js";
 
 let io = undefined;
 

@@ -5,7 +5,6 @@ import taskController from "./modules/task/task.controller.js";
 import sprintStatusController from "./modules/sprint/sprint.status.controller.js";
 import meController from "./modules/me/me.controller.js";
 import starController from "./modules/star/star.controller.js";
-import chatController from "./modules/chatroom/chatroom.controller.js";
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
 import cors from "cors";
@@ -51,7 +50,6 @@ export const bootstrap = async (app, express) => {
   app.use("/sprints", sprintStatusController);
   app.use("/me", meController);
   app.use("/stars", starController);
-  app.use("/api/chat", chatController);
 
   app.all("*", (req, res, next) => {
     res.status(404).json({ success: false, message: "page not found" });

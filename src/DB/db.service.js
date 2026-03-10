@@ -118,7 +118,7 @@ export const findOneAndDelete = async ({
 };
 
 export const deleteOne = async ({ model, filter = {} }) => {
-  const document = await model.updateOne(filter);
+  const document = await model.deleteOne(filter);   //// fixed
 
   return document;
 };

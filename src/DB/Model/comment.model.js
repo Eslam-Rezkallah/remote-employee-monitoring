@@ -7,6 +7,7 @@ const commentSchema = new Schema(
       type: String,
       required: true,
       trim: true,
+      maxlength: 8000,
     },
     task: {
       type: Types.ObjectId,
@@ -21,21 +22,32 @@ const commentSchema = new Schema(
     parentComment: {
       type: Types.ObjectId,
       ref: "Comment",
+      default: null,
     },
+    mentions: [
+      {
+        type: Types.ObjectId,
+        ref: "User",
+      },
+    ],
     isEdited: {
       type: Boolean,
       default: false,
     },
-   
-    mentions: [{ type: Types.ObjectId, ref: "User" }],
+    editedAt: {
+      type: Date,
+      default: null,
+    },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
-commentSchema.index({ task: 1, createdAt: -1 });
+// ── Indexes ──────────────────────────────────────────────────
+commentSchema.index({ task: 1, createdAt: 1 });                    // list comments for a task (asc for tree-build)
+commentSchema.index({ task: 1, parentComment: 1, createdAt: 1 }); // threaded replies
+commentSchema.index({ createdBy: 1, createdAt: -1 });              // user's own comments (profile / dashboard)
 
-const commentModel = mongoose.models.Comment || model("Comment", commentSchema);
+const commentModel =
+  mongoose.models.Comment || model("Comment", commentSchema);
 
 export default commentModel;

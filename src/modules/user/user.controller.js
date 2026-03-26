@@ -28,7 +28,7 @@ router.get(
   userService.shareProfile,
 );
 
-// share profile 
+// share profile
 router.post(
   "/profile/share/:profileId",
   authentication(),
@@ -100,5 +100,7 @@ router.patch(
   validation(validators.changeRole),
   userService.changeRoles,
 );
+
+router.get("/members", authentication(), userService.getProjectMembers);
 
 export default router;

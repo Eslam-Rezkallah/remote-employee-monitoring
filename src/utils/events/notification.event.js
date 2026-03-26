@@ -84,8 +84,14 @@ const notifyMany = (recipientIds, payload) =>
  * Who gets it: all task watchers (assignee + anyone who commented before)
  */
 notificationEvent.on("comment_added", async (payload) => {
-  const { watcherIds, triggeredById, commenterName, taskTitle, taskId, commentContent } =
-    payload;
+  const {
+    watcherIds,
+    triggeredById,
+    commenterName,
+    taskTitle,
+    taskId,
+    commentContent,
+  } = payload;
 
   await notifyMany(watcherIds, {
     triggeredById,
@@ -172,8 +178,14 @@ notificationEvent.on("task_assigned", async (payload) => {
  * Who gets it: all task watchers
  */
 notificationEvent.on("task_status_changed", async (payload) => {
-  const { watcherIds, triggeredById, changerName, taskTitle, taskId, newStatus } =
-    payload;
+  const {
+    watcherIds,
+    triggeredById,
+    changerName,
+    taskTitle,
+    taskId,
+    newStatus,
+  } = payload;
 
   await notifyMany(watcherIds, {
     triggeredById,

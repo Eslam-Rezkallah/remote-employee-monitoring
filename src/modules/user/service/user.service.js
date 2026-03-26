@@ -282,6 +282,8 @@ export const updatePassword = asyncHandler(async (req, res, next) => {
 export const enableTwoStepVerification = asyncHandler(
   async (req, res, next) => {
     const { email } = req.body;
+console.log(req.user);
+console.log(email);
 
     const user = await dbService.findOne({
       model: userModel,
@@ -451,5 +453,55 @@ export const dashboard = asyncHandler(async (req, res, next) => {
         image: user.image,
       },
     },
+  });
+});
+/*
+export const getFriends = asyncHandler(async (req, res, next) => {
+  const user = await dbService.findOne({
+    model: userModel,
+    filter: { _id: req.user._id },
+    populate: {
+      path: "friends",
+      select: "firstName lastName email",
+    },
+  });
+
+  return successResponse({
+    res,
+    data: { friends: user.friends },
+  });
+});
+*/
+
+export const getProjectMembers = asyncHandler(async (req, res, next) => {
+  const user = await dbService.findOne({
+    model: userModel,
+    filter: { _id: req.user._id },
+    populate: {
+      path: "teams",
+      select: "members",
+      populate: {
+        path: "members",
+        select: "username email image",
+      },
+    },
+  });
+
+  if (!user) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  const members = [];
+  user.teams.forEach((team) => {
+    team.members.forEach((member) => {
+      if (!members.some((m) => m._id.toString() === member._id.toString())) {
+        members.push(member);
+      }
+    });
+  });
+
+  return successResponse({
+    res,
+    data: { members },
   });
 });

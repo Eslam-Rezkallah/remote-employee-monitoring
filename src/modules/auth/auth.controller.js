@@ -19,14 +19,15 @@ router.patch(
   registrationService.confirmEmail
 );
 
-
+router.post(
+  "/signupWithGoogle",
+  registrationService.signupWithGoogle,
+);
 
 // ... other imports , these are GET requests because they involve browser redirects!!
-router.get("/loginWithGmail", loginService.loginWithGmail); // Step 1: Redirects to Google
-router.get("/google/callback", loginService.googleCallback); // Step 2: Google sends the user here
 
 router.post("/login", validation(validators.login), loginService.login);
-router.post("/loginWithGmail", loginService.loginWithGmail);
+router.post("/loginWithGmail", loginService.loginWithGoogle);
 router.post(
   "/validate-login-otp",
   validation(validators.validateLoginOTP),

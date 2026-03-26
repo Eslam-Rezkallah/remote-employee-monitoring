@@ -1,9 +1,16 @@
-import userModel from "../../../DB/Model/user.model.js";
+import userModel, {
+  providerTypes,
+  roleTypes,
+} from "../../../DB/Model/user.model.js";
 import { emailEvent } from "../../../utils/events/email.event.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-import { compareHash, generateHash } from "../../../utils/security/hash.security.js";
+import {
+  compareHash,
+  generateHash,
+} from "../../../utils/security/hash.security.js";
 import * as dbService from "../../../DB/db.service.js";
+import { OAuth2Client } from "google-auth-library";
 
 // User Registration
 export const signup = asyncHandler(async (req, res, next) => {
@@ -11,7 +18,7 @@ export const signup = asyncHandler(async (req, res, next) => {
 
   if (password !== confirmPassword) {
     return next(
-      new Error("Password and Confirm Password do not match", { cause: 400 })
+      new Error("Password and Confirm Password do not match", { cause: 400 }),
     );
   }
 
@@ -48,6 +55,56 @@ export const signup = asyncHandler(async (req, res, next) => {
   });
 });
 
+export const signupWithGoogle = asyncHandler(async (req, res, next) => {
+  const { idToken } = req.body;
+  if (!idToken) {
+    return next(new Error("ID token is required", { cause: 400 }));
+  }
+
+  const client = new OAuth2Client();
+
+  const ticket = await client.verifyIdToken({
+    idToken,
+    audience: process.env.GOOGLE_CLIENT_ID,
+  });
+
+  const payload = ticket.getPayload();
+
+  if (!payload.email_verified) {
+    return next(new Error("Email not verified by Google", { cause: 401 }));
+  }
+
+  const existingUser = await dbService.findOne({
+    model: userModel,
+    filter: { email: payload.email },
+  });
+
+  if (existingUser) {
+    return next(
+      new Error("User already exists. Please login instead.", { cause: 409 }),
+    );
+  }
+
+  const newUser = await dbService.create({
+    model: userModel,
+    data: {
+      email: payload.email,
+      username: payload.name,
+      profilePic: { secure_url: payload.picture },
+      confirmEmail: true,
+      provider: providerTypes.Google,
+      isProfileComplete: false,
+    },
+  });
+
+  return successResponse({
+    res,
+    message: "Google account registered successfully",
+    data: newUser,
+    status: 201,
+  });
+});
+
 // Confirm Email OTP
 export const confirmEmail = asyncHandler(async (req, res, next) => {
   const { email, code } = req.body;
@@ -66,7 +123,10 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
   }
 
   // If ban exists and expired -> reset counters and resend OTP
-  if (user.confirmEmailOTPBanUntil && user.confirmEmailOTPBanUntil < Date.now()) {
+  if (
+    user.confirmEmailOTPBanUntil &&
+    user.confirmEmailOTPBanUntil < Date.now()
+  ) {
     await dbService.updateOne({
       model: userModel,
       filter: { email },
@@ -85,15 +145,20 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
     return next(
       new Error(
         "Incorrect OTP. A new OTP has been sent to your email. Please check your inbox.",
-        { cause: 401 }
-      )
+        { cause: 401 },
+      ),
     );
   }
 
   // If currently banned
-  if (user.confirmEmailOTPBanUntil && user.confirmEmailOTPBanUntil > Date.now()) {
+  if (
+    user.confirmEmailOTPBanUntil &&
+    user.confirmEmailOTPBanUntil > Date.now()
+  ) {
     return next(
-      new Error("Your request has been banned. Try again later.", { cause: 429 })
+      new Error("Your request has been banned. Try again later.", {
+        cause: 429,
+      }),
     );
   }
 
@@ -104,7 +169,7 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
     return next(
       new Error("OTP expired. A new OTP has been sent to your email.", {
         cause: 401,
-      })
+      }),
     );
   }
 
@@ -132,8 +197,8 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
       return next(
         new Error(
           "Too many failed confirmation attempts. Please try again after 5 minutes.",
-          { cause: 429 }
-        )
+          { cause: 429 },
+        ),
       );
     }
 
@@ -143,8 +208,8 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
     return next(
       new Error(
         "Incorrect OTP. A new OTP has been sent to your email. Please check your inbox.",
-        { cause: 401 }
-      )
+        { cause: 401 },
+      ),
     );
   }
 

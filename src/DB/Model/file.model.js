@@ -39,7 +39,7 @@ const fileSchema = new Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 fileSchema.index({ uploadedBy: 1, createdAt: -1 });

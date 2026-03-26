@@ -1,33 +1,31 @@
 import { Server } from "socket.io";
 import { logoutSocketId, registerSocket } from "./service/auth.service.js";
-import {
-  sendMessage,
-  handleTyping,
-  handleReaction,
-} from "./service/chat.service.js";
+import { registerChatSocket } from "./service/chat.socket.js";
 
 let io = undefined;
-const onlineUsers = new Map();
 
 export const runIo = (httpServer) => {
   io = new Server(httpServer, {
-    cors: "*",
+    cors: {
+      origin: process.env.FRONTEND_URL || "*",
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
   });
 
-  io.on("connection", async (socket) => {
-    await registerSocket(socket, onlineUsers);
-    await sendMessage(socket, io);
-    await handleTyping(socket, io);
-    await handleReaction(socket, io);
+  // ── Chat namespace: all real-time chat events (send_message, typing, reactions, etc.) ──────
+  const chatNamespace = io.of("/chat");
+  registerChatSocket(chatNamespace);
 
-    await logoutSocketId(socket, onlineUsers);
+  // ── Default namespace: auth, presence, logout ────
+  io.on("connection", async (socket) => {
+    await registerSocket(socket);
+    await logoutSocketId(socket);
   });
 };
 
 export const getIo = () => {
   return io;
-};
-
-export const getOnlineUsers = () => {
-  return Array.from(onlineUsers.keys());
 };

@@ -10,19 +10,16 @@ const router = Router();
 router.post(
   "/signup",
   validation(validators.signup),
-  registrationService.signup
+  registrationService.signup,
 );
 
 router.patch(
   "/confirm-email",
   validation(validators.confirmEmail),
-  registrationService.confirmEmail
+  registrationService.confirmEmail,
 );
 
-router.post(
-  "/signupWithGoogle",
-  registrationService.signupWithGoogle,
-);
+router.post("/signupWithGoogle", registrationService.signupWithGoogle);
 
 // ... other imports , these are GET requests because they involve browser redirects!!
 
@@ -31,27 +28,27 @@ router.post("/loginWithGmail", loginService.loginWithGoogle);
 router.post(
   "/validate-login-otp",
   validation(validators.validateLoginOTP),
-  loginService.validateLoginOTP
+  loginService.validateLoginOTP,
 );
 router.post(
   "/verify-2step-verification",
   validation(validators.verify2StepVerification),
-  loginService.verifyEnableTwoStepVerification
+  loginService.verifyEnableTwoStepVerification,
 );
 router.patch(
   "/forget-password",
   validation(validators.forgetPassword),
-  loginService.forgetPassword
+  loginService.forgetPassword,
 );
 router.patch(
   "/validate-forget-password",
   validation(validators.validateForgetPassword),
-  loginService.validateForgetPassword
+  loginService.validateForgetPassword,
 );
 router.patch(
   "/reset-password",
   validation(validators.resetPassword),
-  loginService.resetPassword
+  loginService.resetPassword,
 );
 
 // router.post(
@@ -64,13 +61,13 @@ router.patch(
 router.post(
   "/org-create",
   validation(validators.createOrganization),
-  organizationService.createOrganizationController
+  organizationService.createOrganizationController,
 );
 
 router.post(
   "/org-join",
   validation(validators.joinOrganization),
-  organizationService.joinOrganizationController
+  organizationService.joinOrganizationController,
 );
 
 export default router;

@@ -7,11 +7,16 @@ import starController from "./modules/star/star.controller.js";
 import commentController  from "./modules/comment/comment.controller.js";
 import projectController from "./modules/project/project.controller.js";
 import teamController from "./modules/team/team.controller.js";
- import notificationController from "./modules/notification/notification.controller.js";
+import notificationController from "./modules/notification/notification.controller.js";
 import spaceController from "./modules/space/space.controller.js";
+import workSessionController from "./modules/workSession/workSession.controller.js";
 
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
+import {
+  startIdleDetection,
+  recoverOrphanedSessions,
+} from "./utils/jobs/idle.detection.job.js";
 import cors from "cors";
 import path from "node:path";
 import rateLimit from "express-rate-limit";
@@ -57,13 +62,20 @@ export const bootstrap = async (app, express) => {
   app.use("/org/:orgId/projects", projectController);
   app.use("/teams", teamController);
   app.use("/org/:orgId/spaces", spaceController);
-
+  app.use("/work-session", workSessionController);
 
   app.all("*", (req, res, next) => {
     res.status(404).json({ success: false, message: "page not found" });
   });
   app.use(globalErrorHandling);
-  connectDB();
+
+    // ── database ──────────────────────────────────────────────
+  await connectDB();
+ 
+  // ── work session boot hooks (run after DB is ready) ───────
+  await recoverOrphanedSessions();
+  startIdleDetection();
+
 };
 
 export default bootstrap;

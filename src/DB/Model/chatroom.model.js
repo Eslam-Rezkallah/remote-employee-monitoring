@@ -11,19 +11,16 @@ export const chatRoomTypes = {
 
 const chatRoomSchema = new Schema(
   {
-    // ── Identity ──────────────────────────────────────────────
     name: { type: String, trim: true, maxlength: 100, default: null },
     description: { type: String, trim: true, maxlength: 500, default: null },
     icon: { type: String, default: null },
 
-    // ── Type ──────────────────────────────────────────────────
     type: {
       type: String,
       enum: Object.values(chatRoomTypes),
       required: true,
     },
 
-    // ── Scope (at least one required based on type) ────────────
     organizationId: {
       type: Types.ObjectId,
       ref: "Organization",
@@ -32,22 +29,24 @@ const chatRoomSchema = new Schema(
     teamId: { type: Types.ObjectId, ref: "Team", default: null },
     projectId: { type: Types.ObjectId, ref: "Project", default: null },
 
-    // ── Members ───────────────────────────────────────────────
     members: [{ type: Types.ObjectId, ref: "User" }],
-    // admins: group/channel moderators (subset of members)
     admins: [{ type: Types.ObjectId, ref: "User" }],
 
-    // ── Ownership ─────────────────────────────────────────────
     createdBy: { type: Types.ObjectId, ref: "User", required: true },
 
-    // ── Settings ──────────────────────────────────────────────
     isPrivate: { type: Boolean, default: false },
 
-    // ── Last message (for sidebar preview) ────────────────────
     lastMessage: { type: Types.ObjectId, ref: "Message", default: null },
     lastMessageAt: { type: Date, default: null },
 
-    // ── Soft-delete / archive ─────────────────────────────────
+    // ✅ NEW: Per-user unread message counts
+    // Stored as a Map: { "userId1": 3, "userId2": 0, ... }
+    unreadCounts: {
+      type: Map,
+      of: Number,
+      default: {},
+    },
+
     isArchived: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },

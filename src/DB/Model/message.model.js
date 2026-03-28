@@ -21,8 +21,8 @@ const attachmentSchema = new Schema(
     public_id: { type: String, default: null },
     originalName: { type: String, default: null },
     mimeType: { type: String, default: null },
-    size: { type: Number, default: 0 }, // bytes
-    duration: { type: Number, default: null }, // seconds (voice/video)
+    size: { type: Number, default: 0 },
+    duration: { type: Number, default: null },
   },
   { _id: false },
 );
@@ -46,7 +46,6 @@ const seenBySchema = new Schema(
 // ── Main schema ────────────────────────────────────────────────
 const messageSchema = new Schema(
   {
-    // ── Core ───────────────────────────────────────────────────
     chatRoomId: {
       type: Types.ObjectId,
       ref: "ChatRoom",
@@ -60,7 +59,6 @@ const messageSchema = new Schema(
       index: true,
     },
 
-    // ── Content ────────────────────────────────────────────────
     content: { type: String, default: "", maxlength: 5000, trim: true },
     messageType: {
       type: String,
@@ -69,24 +67,19 @@ const messageSchema = new Schema(
     },
     attachments: [attachmentSchema],
 
-    // ── Threading ──────────────────────────────────────────────
     replyTo: { type: Types.ObjectId, ref: "Message", default: null },
 
-    // ── Reactions (references to MessageReaction documents) ────
     reactions: [{ type: Types.ObjectId, ref: "MessageReaction" }],
 
-    // ── Delivery & Read receipts ───────────────────────────────
     deliveredTo: [deliveredToSchema],
     seenBy: [seenBySchema],
 
-    // ── Edit tracking ──────────────────────────────────────────
     edited: { type: Boolean, default: false },
     editedAt: { type: Date, default: null },
 
-    // ── Delete tracking ────────────────────────────────────────
     deleted: { type: Boolean, default: false },
     deletedForEveryone: { type: Boolean, default: false },
-    deletedFor: [{ type: Types.ObjectId, ref: "User" }], // "delete for me"
+    deletedFor: [{ type: Types.ObjectId, ref: "User" }],
   },
   { timestamps: true },
 );
@@ -96,6 +89,17 @@ messageSchema.index({ chatRoomId: 1, createdAt: -1 });
 messageSchema.index({ chatRoomId: 1, senderId: 1 });
 messageSchema.index({ senderId: 1, createdAt: -1 });
 messageSchema.index({ chatRoomId: 1, deletedForEveryone: 1, createdAt: -1 });
+
+// ✅ NEW: Full-text search index on message content
+messageSchema.index({ content: "text" });
+
+// ✅ NEW: Index for unread count queries
+messageSchema.index({
+  chatRoomId: 1,
+  "seenBy.userId": 1,
+  senderId: 1,
+  createdAt: -1,
+});
 
 const messageModel = mongoose.models.Message || model("Message", messageSchema);
 

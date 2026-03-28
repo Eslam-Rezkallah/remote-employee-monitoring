@@ -9,14 +9,12 @@ import { cloud } from "../../../utils/multer/cloudinary.multer.js";
 /* ============================================================
    Constants
 ============================================================ */
-const EDIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const DELETE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const EDIT_WINDOW_MS = 60 * 60 * 1000;
+const DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 /* ============================================================
    Shared helpers
 ============================================================ */
-
-/** Assert user is a room member and return the room. */
 async function requireRoomMember(roomId, userId) {
   const room = await dbService.findOne({
     model: chatRoomModel,
@@ -29,12 +27,10 @@ async function requireRoomMember(roomId, userId) {
   return room;
 }
 
-/** Determine Cloudinary folder for a message attachment. */
 function getCloudFolder(userId, roomId) {
   return `${process.env.APP_NAME}/chat/${roomId}/${userId}`;
 }
 
-/** Determine attachment type from mimetype. */
 function resolveAttachmentType(mimetype = "") {
   if (mimetype.startsWith("image/")) return "image";
   if (mimetype.startsWith("video/")) return "video";
@@ -42,7 +38,6 @@ function resolveAttachmentType(mimetype = "") {
   return "file";
 }
 
-/** Upload files to Cloudinary and return attachment objects. */
 async function uploadAttachments(files, userId, roomId) {
   if (!files || !files.length) return [];
 
@@ -76,8 +71,7 @@ async function uploadAttachments(files, userId, roomId) {
 }
 
 /* ============================================================
-   POST /chat/rooms/:roomId/messages
-   Send a message (text, image, voice, file)
+   POST /chat/rooms/:roomId/messages — Send a message
 ============================================================ */
 export const sendMessage = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -86,7 +80,6 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  // Validate reply target
   if (replyTo) {
     const parent = await dbService.findOne({
       model: messageModel,
@@ -96,10 +89,8 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
       return next(new Error("Reply target not found", { cause: 404 }));
   }
 
-  // Handle file attachments (multer populates req.files or req.file)
   const rawFiles = req.files?.length ? req.files : req.file ? [req.file] : [];
 
-  // Must have content OR attachment
   if (!content.trim() && !rawFiles.length) {
     return next(
       new Error("Message must have content or attachment", { cause: 400 }),
@@ -108,7 +99,6 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 
   const attachments = await uploadAttachments(rawFiles, userId, roomId);
 
-  // Resolve message type
   let resolvedType = messageType;
   if (attachments.length && messageType === "text") {
     resolvedType =
@@ -127,14 +117,12 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
     },
   });
 
-  // Update chatroom's last message
   await dbService.updateOne({
     model: chatRoomModel,
     filter: { _id: roomId },
     data: { lastMessage: message._id, lastMessageAt: new Date() },
   });
 
-  // Populate sender for immediate response
   const populated = await messageModel
     .findById(message._id)
     .populate("senderId", "username email image")
@@ -148,8 +136,7 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 });
 
 /* ============================================================
-   GET /chat/rooms/:roomId/messages
-   Paginated message history (newest first or cursor-based)
+   GET /chat/rooms/:roomId/messages — Paginated history
 ============================================================ */
 export const listMessages = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -163,10 +150,9 @@ export const listMessages = asyncHandler(async (req, res, next) => {
   const filter = {
     chatRoomId: roomId,
     deletedForEveryone: false,
-    deletedFor: { $ne: userId }, // exclude messages deleted for this user
+    deletedFor: { $ne: userId },
   };
 
-  // Cursor-based pagination: messages before a given date
   if (before) {
     filter.createdAt = { $lt: new Date(before) };
   }
@@ -188,8 +174,10 @@ export const listMessages = asyncHandler(async (req, res, next) => {
     messageModel.countDocuments(filter),
   ]);
 
-  // Return in chronological order
   messages.reverse();
+
+  // ✅ NEW: Return hasMore flag for infinite scroll
+  const hasMore = skip + parseInt(limit) < total;
 
   return successResponse({
     res,
@@ -198,13 +186,106 @@ export const listMessages = asyncHandler(async (req, res, next) => {
       total,
       page: parseInt(page),
       limit: parseInt(limit),
+      hasMore,
     },
   });
 });
 
 /* ============================================================
-   PATCH /chat/rooms/:roomId/messages/:messageId
-   Edit a message (owner only, within 1 hour)
+   ✅ NEW: GET /chat/rooms/:roomId/messages/search?q=&page=&limit=
+   Feature 1: Full-text search on message content
+============================================================ */
+export const searchMessages = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+  const { q, page = 1, limit = 20 } = req.query;
+
+  await requireRoomMember(roomId, userId);
+
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const filter = {
+    chatRoomId: roomId,
+    deletedForEveryone: false,
+    deletedFor: { $ne: userId },
+    $text: { $search: q },
+  };
+
+  const [messages, total] = await Promise.all([
+    messageModel
+      .find(filter, { score: { $meta: "textScore" } })
+      .populate("senderId", "username email image")
+      .sort({ score: { $meta: "textScore" } })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(),
+    messageModel.countDocuments(filter),
+  ]);
+
+  return successResponse({
+    res,
+    data: {
+      messages,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      query: q,
+      hasMore: skip + parseInt(limit) < total,
+    },
+  });
+});
+
+/* ============================================================
+   ✅ NEW: GET /chat/rooms/unread-counts
+   Feature 4: Unread message count per room
+============================================================ */
+export const getUnreadCounts = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
+
+  // Get all rooms the user is in
+  const rooms = await chatRoomModel
+    .find({ members: userId, isDeleted: false })
+    .select("_id")
+    .lean();
+
+  const roomIds = rooms.map((r) => r._id);
+
+  // Aggregate unread counts per room
+  const unreadCounts = await messageModel.aggregate([
+    {
+      $match: {
+        chatRoomId: { $in: roomIds },
+        deletedForEveryone: false,
+        deletedFor: { $ne: userId },
+        senderId: { $ne: userId },
+        "seenBy.userId": { $ne: userId },
+      },
+    },
+    {
+      $group: {
+        _id: "$chatRoomId",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  // Convert to a map: { roomId: count }
+  const counts = {};
+  for (const item of unreadCounts) {
+    counts[item._id.toString()] = item.count;
+  }
+
+  // Total unread across all rooms
+  const totalUnread = unreadCounts.reduce((sum, item) => sum + item.count, 0);
+
+  return successResponse({
+    res,
+    data: { counts, totalUnread },
+  });
+});
+
+/* ============================================================
+   PATCH — Edit a message
 ============================================================ */
 export const editMessage = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
@@ -227,7 +308,6 @@ export const editMessage = asyncHandler(async (req, res, next) => {
     return next(new Error("Can only edit your own messages", { cause: 403 }));
   }
 
-  // 1-hour edit window
   const age = Date.now() - new Date(message.createdAt).getTime();
   if (age > EDIT_WINDOW_MS) {
     return next(new Error("Edit window expired (1 hour)", { cause: 403 }));
@@ -249,9 +329,7 @@ export const editMessage = asyncHandler(async (req, res, next) => {
 });
 
 /* ============================================================
-   DELETE /chat/rooms/:roomId/messages/:messageId
-   Delete a message (within 1 hour)
-   deleteType: "me" | "everyone"
+   DELETE — Delete a message
 ============================================================ */
 export const deleteMessage = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
@@ -273,7 +351,6 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
 
   const age = Date.now() - new Date(message.createdAt).getTime();
 
-  // Delete for everyone: owner only, within 1 hour
   if (deleteType === "everyone") {
     if (message.senderId.toString() !== userId.toString()) {
       return next(
@@ -304,7 +381,6 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
     return successResponse({ res, message: "Message deleted for everyone" });
   }
 
-  // Delete for me: just push userId to deletedFor
   await dbService.updateOne({
     model: messageModel,
     filter: { _id: messageId },
@@ -315,8 +391,7 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
 });
 
 /* ============================================================
-   PATCH /chat/rooms/:roomId/messages/:messageId/seen
-   Mark a message (and all before it) as seen by the user
+   PATCH — Mark seen
 ============================================================ */
 export const markSeen = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
@@ -324,7 +399,6 @@ export const markSeen = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  // Mark all messages up to and including messageId as seen
   const pivotMsg = await dbService.findOne({
     model: messageModel,
     filter: { _id: messageId, chatRoomId: roomId },
@@ -338,7 +412,7 @@ export const markSeen = asyncHandler(async (req, res, next) => {
       chatRoomId: roomId,
       createdAt: { $lte: pivotMsg.createdAt },
       "seenBy.userId": { $ne: userId },
-      senderId: { $ne: userId }, // don't mark own messages
+      senderId: { $ne: userId },
     },
     { $addToSet: { seenBy: { userId, seenAt: new Date() } } },
   );
@@ -351,8 +425,7 @@ export const markSeen = asyncHandler(async (req, res, next) => {
 });
 
 /* ============================================================
-   PATCH /chat/rooms/:roomId/messages/:messageId/delivered
-   Mark a message as delivered to the requesting user
+   PATCH — Mark delivered
 ============================================================ */
 export const markDelivered = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;

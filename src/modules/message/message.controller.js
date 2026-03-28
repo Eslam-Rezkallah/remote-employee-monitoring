@@ -8,12 +8,10 @@ import {
   fileValidations,
 } from "../../utils/multer/cloud.multer.js";
 
-// mergeParams: true allows access to :roomId from parent router
 const router = Router({ mergeParams: true });
 
 router.use(authentication());
 
-// Multer: accept images, documents, video, audio
 const uploadAny = uploadCloudFile([
   ...fileValidations.image,
   ...fileValidations.document,
@@ -22,16 +20,22 @@ const uploadAny = uploadCloudFile([
 ]);
 
 // ── Send ──────────────────────────────────────────────────────
-// POST /chat/rooms/:roomId/messages
 router.post(
   "/",
-  uploadAny.array("attachments", 5), // up to 5 files
+  uploadAny.array("attachments", 5),
   validation(validators.sendMessage),
   messageService.sendMessage,
 );
 
-// ── Read ──────────────────────────────────────────────────────
-// GET /chat/rooms/:roomId/messages
+// ── ✅ NEW: Search messages in a room ─────────────────────────
+// GET /chat/rooms/:roomId/messages/search?q=hello&page=1&limit=20
+router.get(
+  "/search",
+  validation(validators.searchMessages),
+  messageService.searchMessages,
+);
+
+// ── List ──────────────────────────────────────────────────────
 router.get(
   "/",
   validation(validators.listMessages),
@@ -39,7 +43,6 @@ router.get(
 );
 
 // ── Edit ──────────────────────────────────────────────────────
-// PATCH /chat/rooms/:roomId/messages/:messageId
 router.patch(
   "/:messageId",
   validation(validators.editMessage),
@@ -47,7 +50,6 @@ router.patch(
 );
 
 // ── Delete ────────────────────────────────────────────────────
-// DELETE /chat/rooms/:roomId/messages/:messageId
 router.delete(
   "/:messageId",
   validation(validators.deleteMessage),
@@ -55,14 +57,12 @@ router.delete(
 );
 
 // ── Receipts ──────────────────────────────────────────────────
-// PATCH /chat/rooms/:roomId/messages/:messageId/seen
 router.patch(
   "/:messageId/seen",
   validation(validators.markSeen),
   messageService.markSeen,
 );
 
-// PATCH /chat/rooms/:roomId/messages/:messageId/delivered
 router.patch(
   "/:messageId/delivered",
   validation(validators.messageParam),

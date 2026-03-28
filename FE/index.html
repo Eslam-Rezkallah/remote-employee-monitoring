@@ -31,6 +31,7 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            gap: 12px;
         }
 
         #topBar h5 {
@@ -41,6 +42,12 @@
         #currentRoomName {
             color: #a0aec0;
             font-size: 13px;
+        }
+
+        /* ✅ Feature 6: Connection status */
+        #connectionStatus {
+            font-size: 11px;
+            margin-left: 8px;
         }
 
         #logoutBtn {
@@ -182,6 +189,7 @@
             text-overflow: ellipsis;
         }
 
+        /* ✅ Feature 4: Unread badge */
         .roomBadge {
             background: #7c6af7;
             color: #fff;
@@ -190,6 +198,7 @@
             border-radius: 10px;
             min-width: 18px;
             text-align: center;
+            flex-shrink: 0;
         }
 
         #createDMBtn {
@@ -252,6 +261,63 @@
             color: #7c6af7;
             min-height: 16px;
             padding: 0 20px;
+        }
+
+        /* ✅ Feature 1: Message search bar */
+        #msgSearchContainer {
+            display: none;
+            padding: 8px 20px;
+            background: #1a1d27;
+            border-bottom: 1px solid #2d3748;
+            position: relative;
+        }
+
+        #msgSearchInput {
+            width: 100%;
+            background: #0f1117;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            color: #fff;
+            padding: 6px 12px;
+            font-size: 13px;
+        }
+
+        #msgSearchInput:focus {
+            outline: none;
+            border-color: #7c6af7;
+        }
+
+        #msgSearchInput::placeholder {
+            color: #4a5568;
+        }
+
+        #searchResults {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 20px;
+            right: 20px;
+            background: #1a1d27;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 200;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, .5);
+        }
+
+        .searchResultItem {
+            padding: 10px 14px;
+            cursor: pointer;
+            border-bottom: 1px solid #2d3748;
+        }
+
+        .searchResultItem:hover {
+            background: #252836;
+        }
+
+        .searchResultItem:last-child {
+            border-bottom: none;
         }
 
         /* ── Messages ── */
@@ -386,6 +452,12 @@
             margin-left: 4px;
         }
 
+        /* ✅ Feature 7: Checkmarks */
+        .checkmark {
+            margin-left: 4px;
+            font-size: 10px;
+        }
+
         /* ── Reply Preview ── */
         #replyPreview {
             display: none;
@@ -396,13 +468,12 @@
             border-radius: 8px;
             font-size: 13px;
             color: #a0aec0;
-            display: flex;
             align-items: center;
             justify-content: space-between;
         }
 
-        #replyPreview.hidden {
-            display: none !important;
+        #replyPreview:not(.hidden) {
+            display: flex;
         }
 
         #clearReply {
@@ -413,6 +484,36 @@
             font-size: 16px;
         }
 
+        /* ✅ Feature 2: Upload progress bar */
+        #uploadProgress {
+            display: none;
+            margin: 0 20px 8px;
+            background: #252836;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        #uploadProgressBar {
+            height: 4px;
+            background: #2d3748;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        #uploadProgressFill {
+            height: 100%;
+            background: #7c6af7;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        #uploadProgressText {
+            color: #a0aec0;
+        }
+
         /* ── Input Bar ── */
         #inputBar {
             background: #1a1d27;
@@ -421,6 +522,25 @@
             display: flex;
             align-items: center;
             gap: 10px;
+        }
+
+        /* ✅ Feature 2: File upload button */
+        #fileUploadBtn {
+            background: transparent;
+            border: 1px solid #2d3748;
+            border-radius: 10px;
+            color: #718096;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #fileUploadBtn:hover {
+            color: #7c6af7;
+            border-color: #7c6af7;
         }
 
         #msgInput {
@@ -459,7 +579,7 @@
             cursor: not-allowed;
         }
 
-        /* ── No Room Selected ── */
+        /* ── No Room ── */
         #noRoom {
             flex: 1;
             display: flex;
@@ -474,7 +594,7 @@
             margin-top: 16px;
         }
 
-        /* ── Modal: New DM ── */
+        /* ── Modal ── */
         .modal-content {
             background: #1a1d27;
             border: 1px solid #2d3748;
@@ -568,6 +688,9 @@
     <div id="topBar">
         <h5>💬 Chat App</h5>
         <span id="currentRoomName">Select a room to start chatting</span>
+        <!-- ✅ Feature 6: Connection status indicator -->
+        <span id="connectionStatus"></span>
+        <div style="flex:1;"></div>
         <button id="logoutBtn">Logout</button>
     </div>
 
@@ -577,10 +700,10 @@
         <!-- ── Sidebar ── -->
         <div id="sidebar">
             <div id="sidebarTabs">
-                <button class="sideTab active" onclick="switchTab('all')">All</button>
-                <button class="sideTab" onclick="switchTab('direct')">DMs</button>
-                <button class="sideTab" onclick="switchTab('channel')">Channels</button>
-                <button class="sideTab" onclick="switchTab('group')">Groups</button>
+                <button class="sideTab active" onclick="switchTab('all', event)">All</button>
+                <button class="sideTab" onclick="switchTab('direct', event)">DMs</button>
+                <button class="sideTab" onclick="switchTab('channel', event)">Channels</button>
+                <button class="sideTab" onclick="switchTab('group', event)">Groups</button>
             </div>
             <div id="sidebarSearch">
                 <input type="text" id="searchInput" placeholder="Search rooms..." oninput="filterRooms(this.value)" />
@@ -600,13 +723,33 @@
                     <small id="chatHeaderSub">members</small>
                 </div>
             </div>
+
+            <!-- ✅ Feature 1: Message search -->
+            <div id="msgSearchContainer">
+                <input type="text" id="msgSearchInput" placeholder="🔍 Search messages in this room..." />
+                <div id="searchResults"></div>
+            </div>
+
             <div id="typingIndicator"></div>
             <div id="messageList"></div>
+
             <div id="replyPreview" class="hidden">
                 <span id="replyText"></span>
                 <button id="clearReply" onclick="clearReply()">✕</button>
             </div>
+
+            <!-- ✅ Feature 2: Upload progress -->
+            <div id="uploadProgress">
+                <span id="uploadProgressText">Uploading...</span>
+                <div id="uploadProgressBar">
+                    <div id="uploadProgressFill"></div>
+                </div>
+            </div>
+
             <div id="inputBar">
+                <!-- ✅ Feature 2: File upload button -->
+                <button id="fileUploadBtn" title="Upload file">📎</button>
+                <input type="file" id="fileInput" style="display:none;" />
                 <textarea id="msgInput" rows="1" placeholder="Type a message..."></textarea>
                 <button id="sendBtn">➤</button>
             </div>

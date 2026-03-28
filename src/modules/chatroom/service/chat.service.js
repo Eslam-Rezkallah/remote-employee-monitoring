@@ -9,16 +9,12 @@ import projectModel from "../../../DB/Model/project.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-import { getPagination } from "../../../utils/db/pagination.js";
+// ✅ NEW: Import getChatNamespace for room creation broadcasts
+import { getChatNamespace } from "../../socket/socket.controller.js";
 
 /* ============================================================
    Shared Helpers
 ============================================================ */
-
-/**
- * Assert the requesting user is an active org member.
- * Returns the membership document.
- */
 async function requireOrgMember(orgId, userId) {
   const member = await dbService.findOne({
     model: memberModel,
@@ -31,9 +27,6 @@ async function requireOrgMember(orgId, userId) {
   return member;
 }
 
-/**
- * Assert the requesting user is a member of the chatroom.
- */
 async function requireRoomMember(roomId, userId) {
   const room = await dbService.findOne({
     model: chatRoomModel,
@@ -46,9 +39,6 @@ async function requireRoomMember(roomId, userId) {
   return room;
 }
 
-/**
- * Assert the requesting user is a room admin or manager.
- */
 async function requireRoomAdmin(room, userId) {
   const uid = userId.toString();
   const isAdmin = room.admins.some((a) => a.toString() === uid);
@@ -59,9 +49,20 @@ async function requireRoomAdmin(room, userId) {
     });
 }
 
+// ✅ NEW: Helper to broadcast room creation to all members via socket
+function broadcastRoomCreated(room) {
+  try {
+    const chatNs = getChatNamespace();
+    if (chatNs && chatNs.broadcastRoomCreated) {
+      chatNs.broadcastRoomCreated(room);
+    }
+  } catch (err) {
+    console.error("[broadcastRoomCreated] Error:", err.message);
+  }
+}
+
 /* ============================================================
    POST /chat/rooms/direct
-   Create a one-on-one DM between two users
 ============================================================ */
 export const createDirect = asyncHandler(async (req, res, next) => {
   const senderId = req.user._id;
@@ -71,7 +72,6 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     return next(new Error("Cannot create a DM with yourself", { cause: 400 }));
   }
 
-  // Check target user exists
   const target = await dbService.findOne({
     model: userModel,
     filter: { _id: targetUserId, isDeleted: false },
@@ -79,7 +79,6 @@ export const createDirect = asyncHandler(async (req, res, next) => {
   });
   if (!target) return next(new Error("Target user not found", { cause: 404 }));
 
-  // Check if DM already exists
   const existing = await dbService.findOne({
     model: chatRoomModel,
     filter: {
@@ -107,22 +106,29 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     },
   });
 
+  // ✅ Populate for broadcast
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5: Broadcast room creation to all members
+  broadcastRoomCreated(populated);
+
   return successResponse(
-    { res, data: { room }, message: "Direct message created" },
+    { res, data: { room: populated }, message: "Direct message created" },
     201,
   );
 });
 
 /* ============================================================
    POST /chat/rooms/channel
-   Create a channel (Admin / Manager only)
 ============================================================ */
 export const createChannel = asyncHandler(async (req, res, next) => {
   const { name, description, organizationId, teamId, projectId, isPrivate } =
     req.body;
   const userId = req.user._id;
 
-  // Organization channel: only org owner/admin (manager level) can create
   if (organizationId) {
     const member = await requireOrgMember(organizationId, userId);
     if (!["owner", "admin"].includes(member.role)) {
@@ -134,7 +140,6 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // Team channel: any team member can create (team members can chat with each other)
   if (teamId && !organizationId) {
     const team = await dbService.findOne({
       model: teamModel,
@@ -146,15 +151,13 @@ export const createChannel = asyncHandler(async (req, res, next) => {
       );
   }
 
-  // Project channel: only project manager or org owner/admin can create (Jira-style)
   if (projectId) {
     const project = await dbService.findOne({
       model: projectModel,
       filter: { _id: projectId, isDeleted: false },
       select: "manager organizationId",
     });
-    if (!project)
-      return next(new Error("Project not found", { cause: 404 }));
+    if (!project) return next(new Error("Project not found", { cause: 404 }));
     const isProjectManager = project.manager.toString() === userId.toString();
     const orgId = project.organizationId;
     let isOrgAdmin = false;
@@ -190,15 +193,22 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     },
   });
 
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
   return successResponse(
-    { res, data: { room }, message: "Channel created" },
+    { res, data: { room: populated }, message: "Channel created" },
     201,
   );
 });
 
 /* ============================================================
    POST /chat/rooms/team
-   Create or get team chat (all team members)
 ============================================================ */
 export const createTeamChat = asyncHandler(async (req, res, next) => {
   const { teamId } = req.body;
@@ -214,15 +224,9 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
       new Error("Team not found or you are not a member", { cause: 404 }),
     );
 
-  const memberIds = team.members.map((m) => m.toString());
-
   let room = await dbService.findOne({
     model: chatRoomModel,
-    filter: {
-      type: chatRoomTypes.team,
-      teamId,
-      isDeleted: false,
-    },
+    filter: { type: chatRoomTypes.team, teamId, isDeleted: false },
   });
 
   if (room) {
@@ -246,15 +250,22 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
     },
   });
 
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
   return successResponse(
-    { res, data: { room }, message: "Team chat created" },
+    { res, data: { room: populated }, message: "Team chat created" },
     201,
   );
 });
 
 /* ============================================================
    POST /chat/rooms/organization
-   Create or get organization chat (all org members)
 ============================================================ */
 export const createOrganizationChat = asyncHandler(async (req, res, next) => {
   const { organizationId } = req.body;
@@ -263,17 +274,15 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
   const member = await requireOrgMember(organizationId, userId);
   if (!["owner", "admin"].includes(member.role)) {
     return next(
-      new Error("Only organization owner or admin can create organization chat", {
-        cause: 403,
-      }),
+      new Error(
+        "Only organization owner or admin can create organization chat",
+        { cause: 403 },
+      ),
     );
   }
 
   const orgMembers = await memberModel
-    .find({
-      organizationId,
-      isActive: true,
-    })
+    .find({ organizationId, isActive: true })
     .select("userId")
     .lean();
   const memberIds = orgMembers.map((m) => m.userId);
@@ -308,15 +317,22 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
     },
   });
 
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
   return successResponse(
-    { res, data: { room }, message: "Organization chat created" },
+    { res, data: { room: populated }, message: "Organization chat created" },
     201,
   );
 });
 
 /* ============================================================
    POST /chat/rooms/group
-   Create a custom group chat
 ============================================================ */
 export const createGroup = asyncHandler(async (req, res, next) => {
   const { name, description, organizationId, memberIds } = req.body;
@@ -331,14 +347,9 @@ export const createGroup = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Validate all members belong to the org
   const allMemberIds = [...new Set([userId.toString(), ...memberIds])];
   const validMembers = await memberModel
-    .find({
-      organizationId,
-      userId: { $in: allMemberIds },
-      isActive: true,
-    })
+    .find({ organizationId, userId: { $in: allMemberIds }, isActive: true })
     .select("userId");
 
   if (validMembers.length !== allMemberIds.length) {
@@ -363,15 +374,22 @@ export const createGroup = asyncHandler(async (req, res, next) => {
     },
   });
 
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
   return successResponse(
-    { res, data: { room }, message: "Group chat created" },
+    { res, data: { room: populated }, message: "Group chat created" },
     201,
   );
 });
 
 /* ============================================================
-   GET /chat/rooms
-   List all rooms the authenticated user belongs to
+   GET /chat/rooms — List rooms
 ============================================================ */
 export const listChatRooms = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
@@ -407,7 +425,6 @@ export const listChatRooms = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    GET /chat/rooms/:roomId
-   Get single room detail
 ============================================================ */
 export const getChatRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -432,7 +449,6 @@ export const getChatRoom = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    PATCH /chat/rooms/:roomId
-   Update room name / description (admin only)
 ============================================================ */
 export const updateRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -469,7 +485,6 @@ export const updateRoom = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    POST /chat/rooms/:roomId/join
-   Join a public channel
 ============================================================ */
 export const joinChannel = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -505,7 +520,6 @@ export const joinChannel = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // Validate org membership for org channels
   if (room.organizationId) {
     await requireOrgMember(room.organizationId, userId);
   }
@@ -526,7 +540,6 @@ export const joinChannel = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    DELETE /chat/rooms/:roomId/leave
-   Leave a room (cannot leave direct messages)
 ============================================================ */
 export const leaveRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
@@ -538,12 +551,10 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
     return next(new Error("Cannot leave a direct message", { cause: 400 }));
   }
 
-  // If last admin leaving a group, assign next member as admin
   const isAdmin = room.admins.some((a) => a.toString() === userId.toString());
   const update = { $pull: { members: userId, admins: userId } };
 
   if (isAdmin && room.admins.length === 1 && room.members.length > 1) {
-    // Assign first non-leaving member as admin
     const nextAdmin = room.members.find(
       (m) => m.toString() !== userId.toString(),
     );
@@ -569,7 +580,6 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    POST /chat/rooms/:roomId/members/:memberId
-   Add a member to a group/channel (admin only)
 ============================================================ */
 export const addMember = asyncHandler(async (req, res, next) => {
   const { roomId, memberId } = req.params;
@@ -584,14 +594,12 @@ export const addMember = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Validate new member exists
   const newMember = await dbService.findOne({
     model: userModel,
     filter: { _id: memberId, isDeleted: false },
   });
   if (!newMember) return next(new Error("User not found", { cause: 404 }));
 
-  // Validate org membership if org-scoped
   if (room.organizationId) {
     await requireOrgMember(room.organizationId, memberId);
   }
@@ -613,7 +621,6 @@ export const addMember = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    DELETE /chat/rooms/:roomId/members/:memberId
-   Remove a member from a group/channel (admin only)
 ============================================================ */
 export const removeMember = asyncHandler(async (req, res, next) => {
   const { roomId, memberId } = req.params;
@@ -628,7 +635,6 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Cannot remove yourself via this route
   if (memberId === userId.toString()) {
     return next(
       new Error("Use the leave endpoint to remove yourself", { cause: 400 }),
@@ -647,7 +653,6 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
 /* ============================================================
    DELETE /chat/rooms/:roomId
-   Delete a room (creator only, soft delete)
 ============================================================ */
 export const deleteRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;

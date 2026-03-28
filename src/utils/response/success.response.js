@@ -1,8 +1,7 @@
-export const successResponse = ({
-  res,
-  status = 200,
-  message = "Success",
-  data = {},
-}) => {
+export const successResponse = (
+  { res, status: inlineStatus, message = "Success", data = {} },
+  positionalStatus,
+) => {
+  const status = positionalStatus || inlineStatus || 200;
   return res.status(status).json({ message, data });
 };

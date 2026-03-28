@@ -1,17 +1,20 @@
 import joi from "joi";
 import { generalFields } from "../../middleware/validation.middleware.js";
+
 export const profileImage = joi
   .object()
   .keys({
     file: generalFields.file.required(),
   })
   .required();
+
 export const shareProfile = joi
   .object()
   .keys({
     profileId: generalFields.id.required(),
   })
   .required();
+
 export const updateEmail = joi
   .object()
   .keys({
@@ -55,9 +58,19 @@ export const enableTwoStepVerification = joi
     email: generalFields.email.required(),
   })
   .required();
+
 export const disabledTwoStepVerification = joi
   .object()
   .keys({
     email: generalFields.email.required(),
+  })
+  .required();
+
+// ✅ FIX: Added missing changeRole validator
+export const changeRole = joi
+  .object()
+  .keys({
+    userId: generalFields.id.required(),
+    role: joi.string().valid("Admin", "Manager", "Member").required(),
   })
   .required();

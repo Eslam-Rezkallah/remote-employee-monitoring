@@ -16,7 +16,8 @@ async function requireOrgMember(orgId, userId) {
     model: memberModel,
     filter: { organizationId: orgId, userId, isActive: true },
   });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
+  if (!member)
+    throw new Error("Not a member of this organization", { cause: 403 });
 }
 
 function getDateRange(query = {}) {
@@ -41,7 +42,8 @@ function median(nums = []) {
   if (!nums.length) return 0;
   const sorted = nums.slice().sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) return Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2));
+  if (sorted.length % 2 === 0)
+    return Number(((sorted[mid - 1] + sorted[mid]) / 2).toFixed(2));
   return Number(sorted[mid].toFixed(2));
 }
 
@@ -53,10 +55,23 @@ function percentile(nums = [], p = 0.85) {
 }
 
 function toHours(startDate, endDate) {
-  return Math.max((new Date(endDate).getTime() - new Date(startDate).getTime()) / 3600000, 0);
+  return Math.max(
+    (new Date(endDate).getTime() - new Date(startDate).getTime()) / 3600000,
+    0,
+  );
 }
 
-async function fetchDoneTasksInRange({ orgId, spaceId, fromDate, toDate, extra = {} }) {
+function deliveriesToHours(deliveries = []) {
+  return deliveries.map((t) => toHours(t.createdAt, t.updatedAt));
+}
+
+async function fetchDoneTasksInRange({
+  orgId,
+  spaceId,
+  fromDate,
+  toDate,
+  extra = {},
+}) {
   return Task.find({
     organizationId: orgId,
     spaceId,
@@ -64,7 +79,11 @@ async function fetchDoneTasksInRange({ orgId, spaceId, fromDate, toDate, extra =
     status: "Done",
     updatedAt: { $gte: fromDate, $lte: toDate },
     ...extra,
-  }).select("title type labels createdAt startDate updatedAt assigneeId sprintId").lean();
+  })
+    .select(
+      "title type labels createdAt startDate updatedAt assigneeId sprintId",
+    )
+    .lean();
 }
 
 export const velocity = asyncHandler(async (req, res, next) => {
@@ -83,15 +102,14 @@ export const velocity = asyncHandler(async (req, res, next) => {
     .select("_id name startDate endDate status");
 
   if (!sprints.length) {
-    return successResponse(
-      { res, data: { velocity: [], average: { tasks: 0, points: 0 }, meta: { last } } },
-      200
-    );
+    return successResponse({
+      res,
+      data: { velocity: [], average: { tasks: 0, points: 0 }, meta: { last } },
+    });
   }
 
   const sprintIds = sprints.map((s) => s._id);
 
-  // Done tasks & points per sprint (aggregate)
   const rows = await Task.aggregate([
     {
       $match: {
@@ -111,11 +129,13 @@ export const velocity = asyncHandler(async (req, res, next) => {
     },
   ]);
 
-  const map = new Map(rows.map((r) => [String(r._id), { tasks: r.tasks, points: r.points }]));
+  const map = new Map(
+    rows.map((r) => [String(r._id), { tasks: r.tasks, points: r.points }]),
+  );
 
-  const velocity = sprints
+  const velocityData = sprints
     .slice()
-    .reverse() // return oldest->newest for charts
+    .reverse()
     .map((s) => {
       const v = map.get(String(s._id)) || { tasks: 0, points: 0 };
       return {
@@ -129,28 +149,27 @@ export const velocity = asyncHandler(async (req, res, next) => {
       };
     });
 
-  const totalTasks = velocity.reduce((sum, v) => sum + v.completedTasks, 0);
-  const totalPoints = velocity.reduce((sum, v) => sum + v.completedPoints, 0);
+  const totalTasks = velocityData.reduce((sum, v) => sum + v.completedTasks, 0);
+  const totalPoints = velocityData.reduce(
+    (sum, v) => sum + v.completedPoints,
+    0,
+  );
 
-  const average = {
-    tasks: Number((totalTasks / velocity.length).toFixed(2)),
-    points: Number((totalPoints / velocity.length).toFixed(2)),
+  const avg = {
+    tasks: Number((totalTasks / velocityData.length).toFixed(2)),
+    points: Number((totalPoints / velocityData.length).toFixed(2)),
   };
 
-  return successResponse(
-    {
-      res,
-      data: {
-        velocity,
-        average,
-        meta: { last: velocity.length },
-      },
+  return successResponse({
+    res,
+    data: {
+      velocity: velocityData,
+      average: avg,
+      meta: { last: velocityData.length },
     },
-    200
-  );
+  });
 });
 
-// BE-8.7
 export const cycleTime = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { sprintId, type, assigneeId, limit = 50 } = req.query;
@@ -170,7 +189,7 @@ export const cycleTime = asyncHandler(async (req, res, next) => {
     limit,
   ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const filter = {
     organizationId: orgId,
@@ -218,19 +237,24 @@ export const cycleTime = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
-// BE-8.8 - deployment frequency (proxy from done delivery tasks)
 export const deploymentFrequency = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { fromDate, toDate } = getDateRange(req.query);
 
   await requireOrgMember(orgId, req.user._id);
 
-  const key = cacheKey(["deploymentFrequency", orgId, spaceId, fromDate.toISOString(), toDate.toISOString()]);
+  const key = cacheKey([
+    "deploymentFrequency",
+    orgId,
+    spaceId,
+    fromDate.toISOString(),
+    toDate.toISOString(),
+  ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const doneDeployments = await fetchDoneTasksInRange({
     orgId,
@@ -240,21 +264,24 @@ export const deploymentFrequency = asyncHandler(async (req, res, next) => {
     extra: { type: { $in: [taskTypes.Task, taskTypes.Story] } },
   });
 
-  const totalDays = Math.max(Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000), 1);
+  const totalDays = Math.max(
+    Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000),
+    1,
+  );
   const bucketByWeek = totalDays > 45;
 
   const buckets = {};
   for (const t of doneDeployments) {
     const d = new Date(t.updatedAt);
     let keyDate = d.toISOString().slice(0, 10);
-
     if (bucketByWeek) {
       const day = d.getUTCDay() || 7;
-      const weekStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+      const weekStart = new Date(
+        Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+      );
       weekStart.setUTCDate(weekStart.getUTCDate() - (day - 1));
       keyDate = weekStart.toISOString().slice(0, 10);
     }
-
     buckets[keyDate] = (buckets[keyDate] || 0) + 1;
   }
 
@@ -275,19 +302,24 @@ export const deploymentFrequency = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
-// BE-8.8 - change failure rate (proxy from done Bug items)
 export const changeFailureRate = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { fromDate, toDate } = getDateRange(req.query);
 
   await requireOrgMember(orgId, req.user._id);
 
-  const key = cacheKey(["changeFailureRate", orgId, spaceId, fromDate.toISOString(), toDate.toISOString()]);
+  const key = cacheKey([
+    "changeFailureRate",
+    orgId,
+    spaceId,
+    fromDate.toISOString(),
+    toDate.toISOString(),
+  ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const deployments = await fetchDoneTasksInRange({
     orgId,
@@ -318,19 +350,24 @@ export const changeFailureRate = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
-// BE-8.8 - MTTR (proxy from done bug resolution time)
 export const mttr = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { fromDate, toDate } = getDateRange(req.query);
 
   await requireOrgMember(orgId, req.user._id);
 
-  const key = cacheKey(["mttr", orgId, spaceId, fromDate.toISOString(), toDate.toISOString()]);
+  const key = cacheKey([
+    "mttr",
+    orgId,
+    spaceId,
+    fromDate.toISOString(),
+    toDate.toISOString(),
+  ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const incidents = await fetchDoneTasksInRange({
     orgId,
@@ -352,19 +389,24 @@ export const mttr = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
-// BE-8.8 - Lead time (proxy from done delivery items)
 export const leadTime = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { fromDate, toDate } = getDateRange(req.query);
 
   await requireOrgMember(orgId, req.user._id);
 
-  const key = cacheKey(["leadTime", orgId, spaceId, fromDate.toISOString(), toDate.toISOString()]);
+  const key = cacheKey([
+    "leadTime",
+    orgId,
+    spaceId,
+    fromDate.toISOString(),
+    toDate.toISOString(),
+  ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const deliveries = await fetchDoneTasksInRange({
     orgId,
@@ -386,21 +428,28 @@ export const leadTime = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
-// BE-8.8 - Summary endpoint
+// ✅ FIX: devopsSummary — removed duplicate query, reuse failures as incidents
 export const devopsSummary = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { fromDate, toDate } = getDateRange(req.query);
 
   await requireOrgMember(orgId, req.user._id);
 
-  const key = cacheKey(["devopsSummary", orgId, spaceId, fromDate.toISOString(), toDate.toISOString()]);
+  const key = cacheKey([
+    "devopsSummary",
+    orgId,
+    spaceId,
+    fromDate.toISOString(),
+    toDate.toISOString(),
+  ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
-  const [deployments, failures, incidents] = await Promise.all([
+  // ✅ FIX: Only 2 queries instead of 3 (bugs = failures = incidents in this proxy model)
+  const [deployments, bugs] = await Promise.all([
     fetchDoneTasksInRange({
       orgId,
       spaceId,
@@ -415,20 +464,16 @@ export const devopsSummary = asyncHandler(async (req, res, next) => {
       toDate,
       extra: { type: taskTypes.Bug },
     }),
-    fetchDoneTasksInRange({
-      orgId,
-      spaceId,
-      fromDate,
-      toDate,
-      extra: { type: taskTypes.Bug },
-    }),
   ]);
 
-  const days = Math.max(Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000), 1);
+  const days = Math.max(
+    Math.ceil((toDate.getTime() - fromDate.getTime()) / 86400000),
+    1,
+  );
   const deploymentFreqPerDay = Number((deployments.length / days).toFixed(2));
 
   const leadHours = deliveriesToHours(deployments);
-  const mttrHoursList = incidents.map((t) => toHours(t.createdAt, t.updatedAt));
+  const mttrHoursList = bugs.map((t) => toHours(t.createdAt, t.updatedAt));
 
   const payload = {
     range: { from: fromDate, to: toDate },
@@ -438,7 +483,7 @@ export const devopsSummary = asyncHandler(async (req, res, next) => {
       perWeek: Number((deploymentFreqPerDay * 7).toFixed(2)),
     },
     changeFailureRatePercent: deployments.length
-      ? Number(((failures.length / deployments.length) * 100).toFixed(2))
+      ? Number(((bugs.length / deployments.length) * 100).toFixed(2))
       : 0,
     leadTime: {
       avgHours: average(leadHours),
@@ -452,7 +497,7 @@ export const devopsSummary = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
 // AI-8.1
@@ -466,7 +511,7 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
 
   const key = cacheKey(["aiSprintCompletion", orgId, spaceId, sprintId]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const sprint = await Sprint.findOne({
     _id: sprintId,
@@ -483,7 +528,9 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
     sprintId,
     isDeleted: false,
   })
-    .select("_id title status points type priority assigneeId createdAt updatedAt dueDate")
+    .select(
+      "_id title status points type priority assigneeId createdAt updatedAt dueDate",
+    )
     .lean();
 
   const historySprints = await Sprint.find({
@@ -501,35 +548,40 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
   const historyIds = historySprints.map((s) => s._id);
   const rows = historyIds.length
     ? await Task.aggregate([
-      {
-        $match: {
-          organizationId: new mongoose.Types.ObjectId(orgId),
-          spaceId: new mongoose.Types.ObjectId(spaceId),
-          isDeleted: false,
-          sprintId: { $in: historyIds },
-          status: "Done",
+        {
+          $match: {
+            organizationId: new mongoose.Types.ObjectId(orgId),
+            spaceId: new mongoose.Types.ObjectId(spaceId),
+            isDeleted: false,
+            sprintId: { $in: historyIds },
+            status: "Done",
+          },
         },
-      },
-      {
-        $group: {
-          _id: "$sprintId",
-          completedTasks: { $sum: 1 },
-          completedPoints: { $sum: { $ifNull: ["$points", 0] } },
+        {
+          $group: {
+            _id: "$sprintId",
+            completedTasks: { $sum: 1 },
+            completedPoints: { $sum: { $ifNull: ["$points", 0] } },
+          },
         },
-      },
-    ])
+      ])
     : [];
 
   const bySprint = new Map(
-    rows.map((r) => [String(r._id), { completedTasks: r.completedTasks, completedPoints: r.completedPoints }])
+    rows.map((r) => [
+      String(r._id),
+      { completedTasks: r.completedTasks, completedPoints: r.completedPoints },
+    ]),
   );
   const history = historySprints.map((s) => {
-    const r = bySprint.get(String(s._id)) || { completedTasks: 0, completedPoints: 0 };
+    const r = bySprint.get(String(s._id)) || {
+      completedTasks: 0,
+      completedPoints: 0,
+    };
     return {
       sprintId: s._id,
       sprint: s.name,
-      completedTasks: r.completedTasks,
-      completedPoints: r.completedPoints,
+      ...r,
       startDate: s.startDate,
       endDate: s.endDate,
       status: s.status,
@@ -555,7 +607,7 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
 
 // AI-8.2
@@ -575,7 +627,7 @@ export const detectBottlenecks = asyncHandler(async (req, res, next) => {
     toDate.toISOString(),
   ]);
   const cached = cache.get(key);
-  if (cached) return successResponse({ res, data: cached }, 200);
+  if (cached) return successResponse({ res, data: cached });
 
   const filter = {
     organizationId: orgId,
@@ -587,7 +639,7 @@ export const detectBottlenecks = asyncHandler(async (req, res, next) => {
 
   const tasks = await Task.find(filter)
     .select(
-      "_id title type status priority assigneeId points dueDate createdAt updatedAt sprintId"
+      "_id title type status priority assigneeId points dueDate createdAt updatedAt sprintId",
     )
     .limit(2500)
     .lean();
@@ -612,11 +664,5 @@ export const detectBottlenecks = asyncHandler(async (req, res, next) => {
   };
 
   cache.set(key, payload);
-  return successResponse({ res, data: payload }, 200);
+  return successResponse({ res, data: payload });
 });
-
-function deliveriesToHours(deliveries = []) {
-  return deliveries.map((t) => toHours(t.createdAt, t.updatedAt));
-}
-
-

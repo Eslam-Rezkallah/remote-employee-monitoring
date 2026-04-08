@@ -1,288 +1,680 @@
-import { asyncHandler } from "../../../utils/response/error.response.js";
-import * as dbService from "../../../DB/db.service.js";
-import { successResponse } from "../../../utils/response/success.response.js";
-import chatRoomModel from "../../../DB/Model/chatroom.model.js";
-import messageModel from "../../../DB/Model/message.model.js";
-import fileModel from "../../../DB/Model/file.model.js";
+import mongoose from "mongoose";
+import chatRoomModel, {
+  chatRoomTypes,
+} from "../../../DB/Model/chatroom.model.js";
 import memberModel from "../../../DB/Model/member.model.js";
-import projectModel from "../../../DB/Model/project.model.js";
 import userModel from "../../../DB/Model/user.model.js";
-import { Types } from "mongoose";
-const requireOrgMember = async (orgId, userId) => {
+import teamModel from "../../../DB/Model/team.model.js";
+import projectModel from "../../../DB/Model/project.model.js";
+import * as dbService from "../../../DB/db.service.js";
+import { asyncHandler } from "../../../utils/response/error.response.js";
+import { successResponse } from "../../../utils/response/success.response.js";
+// ✅ NEW: Import getChatNamespace for room creation broadcasts
+import { getChatNamespace } from "../../socket/socket.controller.js";
+
+/* ============================================================
+   Shared Helpers
+============================================================ */
+async function requireOrgMember(orgId, userId) {
   const member = await dbService.findOne({
     model: memberModel,
     filter: { organizationId: orgId, userId, isActive: true },
   });
   if (!member)
-    throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-};
-
-export const createChatRoom = asyncHandler(async (req, res, next) => {
-  const { type, name, projectId, members, orgId } = req.body;
-  await requireOrgMember(orgId, req.user._id);
-
-  if (type === "private") {
-    const existing = await dbService.findOne({
-      model: chatRoomModel,
-      filter: {
-        type: "private",
-        members: { $all: [req.user._id, members[0]] },
-        organization: orgId,
-      },
+    throw Object.assign(new Error("Not a member of this organization"), {
+      cause: 403,
     });
-    if (existing) return successResponse({ res, data: { chatRoom: existing } });
+  return member;
+}
+
+async function requireRoomMember(roomId, userId) {
+  const room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: roomId, members: userId, isDeleted: false },
+  });
+  if (!room)
+    throw Object.assign(new Error("Room not found or access denied"), {
+      cause: 404,
+    });
+  return room;
+}
+
+async function requireRoomAdmin(room, userId) {
+  const uid = userId.toString();
+  const isAdmin = room.admins.some((a) => a.toString() === uid);
+  const isCreator = room.createdBy.toString() === uid;
+  if (!isAdmin && !isCreator)
+    throw Object.assign(new Error("Not authorized to manage this room"), {
+      cause: 403,
+    });
+}
+
+// ✅ NEW: Helper to broadcast room creation to all members via socket
+function broadcastRoomCreated(room) {
+  try {
+    const chatNs = getChatNamespace();
+    if (chatNs && chatNs.broadcastRoomCreated) {
+      chatNs.broadcastRoomCreated(room);
+    }
+  } catch (err) {
+    console.error("[broadcastRoomCreated] Error:", err.message);
+  }
+}
+
+/* ============================================================
+   POST /chat/rooms/direct
+============================================================ */
+export const createDirect = asyncHandler(async (req, res, next) => {
+  const senderId = req.user._id;
+  const { targetUserId } = req.body;
+
+  if (senderId.toString() === targetUserId) {
+    return next(new Error("Cannot create a DM with yourself", { cause: 400 }));
   }
 
-  const chatRoomData = {
-    type,
-    organization: orgId,
-    members: [req.user._id, ...members],
-  };
-  if (type === "group") chatRoomData.name = name;
-  if (type === "project") {
+  const target = await dbService.findOne({
+    model: userModel,
+    filter: { _id: targetUserId, isDeleted: false },
+    select: "_id username",
+  });
+  if (!target) return next(new Error("Target user not found", { cause: 404 }));
+
+  const existing = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      type: chatRoomTypes.direct,
+      members: { $all: [senderId, targetUserId], $size: 2 },
+      isDeleted: false,
+    },
+  });
+  if (existing) {
+    return successResponse({
+      res,
+      data: { room: existing },
+      message: "DM already exists",
+    });
+  }
+
+  const room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      type: chatRoomTypes.direct,
+      members: [senderId, targetUserId],
+      admins: [senderId],
+      createdBy: senderId,
+      isPrivate: true,
+    },
+  });
+
+  // ✅ Populate for broadcast
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5: Broadcast room creation to all members
+  broadcastRoomCreated(populated);
+
+  return successResponse(
+    { res, data: { room: populated }, message: "Direct message created" },
+    201,
+  );
+});
+
+/* ============================================================
+   POST /chat/rooms/channel
+============================================================ */
+export const createChannel = asyncHandler(async (req, res, next) => {
+  const { name, description, organizationId, teamId, projectId, isPrivate } =
+    req.body;
+  const userId = req.user._id;
+
+  if (organizationId) {
+    const member = await requireOrgMember(organizationId, userId);
+    if (!["owner", "admin"].includes(member.role)) {
+      return next(
+        new Error("Only organization owner or admin can create channels", {
+          cause: 403,
+        }),
+      );
+    }
+  }
+
+  if (teamId && !organizationId) {
+    const team = await dbService.findOne({
+      model: teamModel,
+      filter: { _id: teamId, members: userId, isDeleted: false },
+    });
+    if (!team)
+      return next(
+        new Error("Team not found or you are not a member", { cause: 404 }),
+      );
+  }
+
+  if (projectId) {
     const project = await dbService.findOne({
       model: projectModel,
-      filter: { _id: projectId, team: { $in: req.user.teams } },
+      filter: { _id: projectId, isDeleted: false },
+      select: "manager organizationId",
     });
-    if (!project)
+    if (!project) return next(new Error("Project not found", { cause: 404 }));
+    const isProjectManager = project.manager.toString() === userId.toString();
+    const orgId = project.organizationId;
+    let isOrgAdmin = false;
+    if (orgId) {
+      const mem = await dbService.findOne({
+        model: memberModel,
+        filter: { organizationId: orgId, userId, isActive: true },
+      });
+      isOrgAdmin = mem && ["owner", "admin"].includes(mem.role);
+    }
+    if (!isProjectManager && !isOrgAdmin)
       return next(
-        new Error("Project not found or access denied", { cause: 404 }),
+        new Error(
+          "Only project manager or organization owner/admin can create project channels",
+          { cause: 403 },
+        ),
       );
-    chatRoomData.project = projectId;
-    chatRoomData.name = project.title;
   }
 
-  const chatRoom = await dbService.create({
+  const room = await dbService.create({
     model: chatRoomModel,
-    data: chatRoomData,
-  });
-  return successResponse({ res, data: { chatRoom } });
-});
-
-export const getChatRooms = asyncHandler(async (req, res, next) => {
-  const { orgId, type, page = 1, limit = 20 } = req.query;
-  await requireOrgMember(orgId, req.user._id);
-
-  const filter = { members: req.user._id, organization: orgId };
-  if (type) filter.type = type;
-
-  const chatRooms = await dbService.find({
-    model: chatRoomModel,
-    filter,
-    populate: [
-      { path: "members", select: "username image" },
-      { path: "lastMessage", populate: { path: "sender", select: "username" } },
-      { path: "project", select: "title" },
-    ],
-    skip: (page - 1) * limit,
-    limit,
-    sort: { updatedAt: -1 },
-  });
-
-  return successResponse({ res, data: { chatRooms } });
-});
-
-export const sendMessage = asyncHandler(async (req, res, next) => {
-  console.log("Updated sendMessage running");
-  const { chatRoomId, content, replyTo, mentions } = req.body;
-
-  const chatRoom = await dbService.findOne({
-    model: chatRoomModel,
-    filter: { _id: chatRoomId, members: req.user._id },
-  });
-  if (!chatRoom) return next(new Error("Chat room not found", { cause: 404 }));
-
-  const parsedMentions =
-    mentions || content.match(/@(\w+)/g)?.map((m) => m.slice(1)) || [];
-  const mentionUsers = await dbService.find({
-    model: userModel,
-    filter: {
-      username: { $in: parsedMentions },
-      teams: { $in: req.user.teams },
-    },
-  });
-
-  const message = await dbService.create({
-    model: messageModel,
     data: {
-      content,
-      chatRoom: chatRoomId,
-      sender: req.user._id,
-      replyTo,
-      mentions: mentionUsers.map((u) => u._id),
+      name,
+      description: description || null,
+      type: chatRoomTypes.channel,
+      organizationId: organizationId || null,
+      teamId: teamId || null,
+      projectId: projectId || null,
+      members: [userId],
+      admins: [userId],
+      createdBy: userId,
+      isPrivate: isPrivate ?? false,
     },
   });
 
-  // Temporary: Just update lastMessage (remove unreadCounts for now)
-  await chatRoomModel.updateOne(
-    { _id: chatRoomId },
-    { $set: { lastMessage: message._id } },
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
+  return successResponse(
+    { res, data: { room: populated }, message: "Channel created" },
+    201,
   );
-
-  return successResponse({ res, data: { message } });
-});
-export const editMessage = asyncHandler(async (req, res, next) => {
-  const { messageId, content } = req.body;
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: { _id: messageId, sender: req.user._id },
-  });
-
-  if (!message)
-    return next(new Error("Message not found or not yours", { cause: 404 }));
-
-  if (Date.now() - message.createdAt > 3600000)
-    return next(new Error("Cannot edit after 1 hour", { cause: 400 }));
-
-  await dbService.updateOne({
-    model: messageModel,
-    filter: { _id: new Types.ObjectId(messageId) },
-    data: { $set: { content, editedAt: new Date() } },
-  });
-
-  return successResponse({
-    res,
-    data: { message: { ...message.toObject(), content, editedAt: new Date() } },
-  });
 });
 
-export const deleteMessage = asyncHandler(async (req, res, next) => {
-  const { messageId } = req.body;
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: { _id: messageId, sender: req.user._id },
+/* ============================================================
+   POST /chat/rooms/team
+============================================================ */
+export const createTeamChat = asyncHandler(async (req, res, next) => {
+  const { teamId } = req.body;
+  const userId = req.user._id;
+
+  const team = await dbService.findOne({
+    model: teamModel,
+    filter: { _id: teamId, members: userId, isDeleted: false },
+    select: "members name",
   });
-  if (!message)
-    return next(new Error("Message not found or not yours", { cause: 404 }));
-
-  console.log("Deleting message", messageId);
-  if (Date.now() - message.createdAt.getTime() > 3600000)
-    return next(new Error("Cannot delete after 1 hour", { cause: 400 }));
-
-  await dbService.updateOne({
-    model: messageModel,
-    filter: { _id: messageId },
-    data: { $set: { deleted: true } },
-  });
-  console.log("Message deleted");
-  return successResponse({ res, message: "Message deleted" });
-});
-
-export const pinMessage = asyncHandler(async (req, res, next) => {
-  const { messageId, pin } = req.body;
-
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: { _id: messageId },
-  });
-  if (!message) return next(new Error("Message not found", { cause: 404 }));
-
-  const chatRoom = await dbService.findOne({
-    model: chatRoomModel,
-    filter: { _id: message.chatRoom, members: req.user._id },
-  });
-  if (!chatRoom)
+  if (!team)
     return next(
-      new Error("Chat room not found or access denied", { cause: 404 }),
+      new Error("Team not found or you are not a member", { cause: 404 }),
     );
 
-  await dbService.updateOne({
+  let room = await dbService.findOne({
     model: chatRoomModel,
-    filter: { _id: chatRoom._id },
-    data: pin
-      ? { $addToSet: { pinnedMessages: new Types.ObjectId(messageId) } } // أضف ObjectId
-      : { $pull: { pinnedMessages: new Types.ObjectId(messageId) } },
+    filter: { type: chatRoomTypes.team, teamId, isDeleted: false },
+  });
+
+  if (room) {
+    return successResponse({
+      res,
+      data: { room },
+      message: "Team chat already exists",
+    });
+  }
+
+  room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name: team.name ? `Team: ${team.name}` : "Team Chat",
+      type: chatRoomTypes.team,
+      teamId,
+      members: team.members,
+      admins: team.members,
+      createdBy: userId,
+      isPrivate: false,
+    },
+  });
+
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
+  return successResponse(
+    { res, data: { room: populated }, message: "Team chat created" },
+    201,
+  );
+});
+
+/* ============================================================
+   POST /chat/rooms/organization
+============================================================ */
+export const createOrganizationChat = asyncHandler(async (req, res, next) => {
+  const { organizationId } = req.body;
+  const userId = req.user._id;
+
+  const member = await requireOrgMember(organizationId, userId);
+  if (!["owner", "admin"].includes(member.role)) {
+    return next(
+      new Error(
+        "Only organization owner or admin can create organization chat",
+        { cause: 403 },
+      ),
+    );
+  }
+
+  const orgMembers = await memberModel
+    .find({ organizationId, isActive: true })
+    .select("userId")
+    .lean();
+  const memberIds = orgMembers.map((m) => m.userId);
+
+  let room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      type: chatRoomTypes.organization,
+      organizationId,
+      isDeleted: false,
+    },
+  });
+
+  if (room) {
+    return successResponse({
+      res,
+      data: { room },
+      message: "Organization chat already exists",
+    });
+  }
+
+  room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name: "Organization Chat",
+      type: chatRoomTypes.organization,
+      organizationId,
+      members: memberIds,
+      admins: memberIds,
+      createdBy: userId,
+      isPrivate: false,
+    },
+  });
+
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
+  return successResponse(
+    { res, data: { room: populated }, message: "Organization chat created" },
+    201,
+  );
+});
+
+/* ============================================================
+   POST /chat/rooms/group
+============================================================ */
+export const createGroup = asyncHandler(async (req, res, next) => {
+  const { name, description, organizationId, memberIds } = req.body;
+  const userId = req.user._id;
+
+  const member = await requireOrgMember(organizationId, userId);
+  if (!["owner", "admin"].includes(member.role)) {
+    return next(
+      new Error("Only organization owner or admin can create group chats", {
+        cause: 403,
+      }),
+    );
+  }
+
+  const allMemberIds = [...new Set([userId.toString(), ...memberIds])];
+  const validMembers = await memberModel
+    .find({ organizationId, userId: { $in: allMemberIds }, isActive: true })
+    .select("userId");
+
+  if (validMembers.length !== allMemberIds.length) {
+    return next(
+      new Error("One or more members are not part of the organization", {
+        cause: 400,
+      }),
+    );
+  }
+
+  const room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name,
+      description: description || null,
+      type: chatRoomTypes.group,
+      organizationId,
+      members: allMemberIds,
+      admins: [userId],
+      createdBy: userId,
+      isPrivate: true,
+    },
+  });
+
+  const populated = await chatRoomModel
+    .findById(room._id)
+    .populate("members", "username email image")
+    .lean();
+
+  // ✅ NEW Feature 5
+  broadcastRoomCreated(populated);
+
+  return successResponse(
+    { res, data: { room: populated }, message: "Group chat created" },
+    201,
+  );
+});
+
+/* ============================================================
+   GET /chat/rooms — List rooms
+============================================================ */
+export const listChatRooms = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
+  const { organizationId, type, page = 1, limit = 20 } = req.query;
+  const skip = (parseInt(page) - 1) * parseInt(limit);
+
+  const filter = { members: userId, isDeleted: false };
+  if (organizationId) filter.organizationId = organizationId;
+  if (type) filter.type = type;
+
+  const [rooms, total] = await Promise.all([
+    chatRoomModel
+      .find(filter)
+      .populate("members", "username email image")
+      .populate("admins", "username email image")
+      .populate({
+        path: "lastMessage",
+        select: "content messageType senderId createdAt",
+        populate: { path: "senderId", select: "username image" },
+      })
+      .sort({ lastMessageAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .lean(),
+    chatRoomModel.countDocuments(filter),
+  ]);
+
+  return successResponse({
+    res,
+    data: { rooms, total, page: parseInt(page), limit: parseInt(limit) },
+  });
+});
+
+/* ============================================================
+   GET /chat/rooms/:roomId
+============================================================ */
+export const getChatRoom = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+
+  const room = await chatRoomModel
+    .findOne({ _id: roomId, members: userId, isDeleted: false })
+    .populate("members", "username email image")
+    .populate("admins", "username email image")
+    .populate("createdBy", "username email image")
+    .populate({
+      path: "lastMessage",
+      select: "content messageType senderId createdAt",
+      populate: { path: "senderId", select: "username image" },
+    });
+
+  if (!room)
+    return next(new Error("Room not found or access denied", { cause: 404 }));
+
+  return successResponse({ res, data: { room } });
+});
+
+/* ============================================================
+   PATCH /chat/rooms/:roomId
+============================================================ */
+export const updateRoom = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+  const { name, description, isPrivate } = req.body;
+
+  const room = await requireRoomMember(roomId, userId);
+  await requireRoomAdmin(room, userId);
+
+  if (room.type === chatRoomTypes.direct) {
+    return next(
+      new Error("Cannot update a direct message room", { cause: 400 }),
+    );
+  }
+
+  const update = {};
+  if (name !== undefined) update.name = name;
+  if (description !== undefined) update.description = description;
+  if (isPrivate !== undefined) update.isPrivate = isPrivate;
+
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: update,
+    options: { new: true },
   });
 
   return successResponse({
     res,
-    message: pin ? "Message pinned" : "Message unpinned",
+    data: { room: updated },
+    message: "Room updated",
   });
 });
-export const getMessages = asyncHandler(async (req, res, next) => {
-  const { page = 1, limit = 20 } = req.query;
-  const { chatRoomId } = req.params;
-  const chatRoom = await dbService.findOne({
+
+/* ============================================================
+   POST /chat/rooms/:roomId/join
+============================================================ */
+export const joinChannel = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+
+  const room = await dbService.findOne({
     model: chatRoomModel,
-    filter: { _id: chatRoomId, members: req.user._id },
+    filter: { _id: roomId, isDeleted: false },
   });
-  if (!chatRoom) return next(new Error("Chat room not found", { cause: 404 }));
+  if (!room) return next(new Error("Room not found", { cause: 404 }));
 
-  const messages = await dbService.find({
-    model: messageModel,
-    filter: { chatRoom: chatRoomId, deleted: { $ne: true } },
-    populate: [
-      { path: "sender", select: "username image" },
-      { path: "attachments" },
-      { path: "replyTo", populate: { path: "sender", select: "username" } },
-    ],
-    skip: (page - 1) * limit,
-    limit,
-    sort: { createdAt: -1 },
-  });
-  console.log("Messages found:", messages.length); // للتحقق
-  return successResponse({ res, data: { messages } });
-});
-
-export const markAsSeen = asyncHandler(async (req, res, next) => {
-  const { chatRoomId } = req.params;
-  await dbService.updateMany({
-    model: messageModel,
-    filter: { chatRoom: chatRoomId, sender: { $ne: req.user._id } },
-    data: {
-      status: "seen",
-      $addToSet: { seenBy: { user: req.user._id, seenAt: new Date() } },
-    },
-  });
-
-  await chatRoomModel.updateOne(
-    { _id: chatRoomId },
-    { $set: { "unreadCounts.$[elem].count": 0 } },
-    { arrayFilters: [{ "elem.user": req.user._id }] },
-  );
-
-  return successResponse({ res, message: "Messages marked as seen" });
-});
-
-export const addReaction = asyncHandler(async (req, res, next) => {
-  const { messageId, emoji } = req.body;
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: { _id: messageId, chatRoom: { $in: req.user.chatRooms } },
-  });
-  if (!message) return next(new Error("Message not found", { cause: 404 }));
-
-  const reaction = message.reactions.find((r) => r.emoji === emoji);
-  if (reaction) {
-    if (reaction.users.includes(req.user._id)) {
-      reaction.users.pull(req.user._id);
-    } else {
-      reaction.users.push(req.user._id);
-    }
-  } else {
-    message.reactions.push({ emoji, users: [req.user._id] });
+  if (room.type !== chatRoomTypes.channel) {
+    return next(
+      new Error("Can only join channels. Use invite for groups.", {
+        cause: 400,
+      }),
+    );
+  }
+  if (room.isPrivate) {
+    return next(
+      new Error("This channel is private. Request an invite.", { cause: 403 }),
+    );
   }
 
-  await message.save();
-  return successResponse({ res, data: { message } });
+  const alreadyMember = room.members.some(
+    (m) => m.toString() === userId.toString(),
+  );
+  if (alreadyMember) {
+    return successResponse({
+      res,
+      message: "Already a member",
+      data: { room },
+    });
+  }
+
+  if (room.organizationId) {
+    await requireOrgMember(room.organizationId, userId);
+  }
+
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $addToSet: { members: userId } },
+    options: { new: true },
+  });
+
+  return successResponse({
+    res,
+    data: { room: updated },
+    message: "Joined channel",
+  });
 });
 
-export const searchMessages = asyncHandler(async (req, res, next) => {
-  const { chatRoomId, query, page = 1, limit = 20 } = req.query;
-  const chatRoom = await dbService.findOne({
+/* ============================================================
+   DELETE /chat/rooms/:roomId/leave
+============================================================ */
+export const leaveRoom = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+
+  const room = await requireRoomMember(roomId, userId);
+
+  if (room.type === chatRoomTypes.direct) {
+    return next(new Error("Cannot leave a direct message", { cause: 400 }));
+  }
+
+  const isAdmin = room.admins.some((a) => a.toString() === userId.toString());
+  const update = { $pull: { members: userId, admins: userId } };
+
+  if (isAdmin && room.admins.length === 1 && room.members.length > 1) {
+    const nextAdmin = room.members.find(
+      (m) => m.toString() !== userId.toString(),
+    );
+    if (nextAdmin) {
+      await dbService.findOneAndUpdate({
+        model: chatRoomModel,
+        filter: { _id: roomId },
+        data: { $addToSet: { admins: nextAdmin } },
+        options: { new: false },
+      });
+    }
+  }
+
+  await dbService.findOneAndUpdate({
     model: chatRoomModel,
-    filter: { _id: chatRoomId, members: req.user._id },
-  });
-  if (!chatRoom) return next(new Error("Chat room not found", { cause: 404 }));
-
-  const messages = await dbService.find({
-    model: messageModel,
-    filter: { chatRoom: chatRoomId, content: { $regex: query, $options: "i" } },
-    skip: (page - 1) * limit,
-    limit,
-    sort: { createdAt: -1 },
+    filter: { _id: roomId },
+    data: update,
+    options: { new: true },
   });
 
-  return successResponse({ res, data: { messages } });
+  return successResponse({ res, message: "Left room successfully" });
+});
+
+/* ============================================================
+   POST /chat/rooms/:roomId/members/:memberId
+============================================================ */
+export const addMember = asyncHandler(async (req, res, next) => {
+  const { roomId, memberId } = req.params;
+  const userId = req.user._id;
+
+  const room = await requireRoomMember(roomId, userId);
+  await requireRoomAdmin(room, userId);
+
+  if (room.type === chatRoomTypes.direct) {
+    return next(
+      new Error("Cannot add members to a direct message", { cause: 400 }),
+    );
+  }
+
+  const newMember = await dbService.findOne({
+    model: userModel,
+    filter: { _id: memberId, isDeleted: false },
+  });
+  if (!newMember) return next(new Error("User not found", { cause: 404 }));
+
+  if (room.organizationId) {
+    await requireOrgMember(room.organizationId, memberId);
+  }
+
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $addToSet: { members: memberId } },
+    options: { new: true },
+    populate: [{ path: "members", select: "username email image" }],
+  });
+
+  return successResponse({
+    res,
+    data: { room: updated },
+    message: "Member added",
+  });
+});
+
+/* ============================================================
+   DELETE /chat/rooms/:roomId/members/:memberId
+============================================================ */
+export const removeMember = asyncHandler(async (req, res, next) => {
+  const { roomId, memberId } = req.params;
+  const userId = req.user._id;
+
+  const room = await requireRoomMember(roomId, userId);
+  await requireRoomAdmin(room, userId);
+
+  if (room.type === chatRoomTypes.direct) {
+    return next(
+      new Error("Cannot remove members from a direct message", { cause: 400 }),
+    );
+  }
+
+  if (memberId === userId.toString()) {
+    return next(
+      new Error("Use the leave endpoint to remove yourself", { cause: 400 }),
+    );
+  }
+
+  await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $pull: { members: memberId, admins: memberId } },
+    options: { new: true },
+  });
+
+  return successResponse({ res, message: "Member removed" });
+});
+
+/* ============================================================
+   DELETE /chat/rooms/:roomId
+============================================================ */
+export const deleteRoom = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params;
+  const userId = req.user._id;
+
+  const room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: roomId, isDeleted: false },
+  });
+  if (!room) return next(new Error("Room not found", { cause: 404 }));
+
+  if (room.createdBy.toString() !== userId.toString()) {
+    return next(
+      new Error("Only the room creator can delete this room", { cause: 403 }),
+    );
+  }
+
+  await dbService.updateOne({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { isDeleted: true, deletedAt: new Date() },
+  });
+
+  return successResponse({ res, message: "Room deleted" });
 });

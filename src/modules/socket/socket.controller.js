@@ -1,26 +1,32 @@
 import { Server } from "socket.io";
 import { logoutSocketId, registerSocket } from "./service/auth.service.js";
-import {
-  sendMessage,
-  handleTyping,
-  handleReaction,
-} from "./service/chat.service.js";
+import { registerChatSocket } from "./service/chat.socket.js";
 
 let io = undefined;
-const onlineUsers = new Map();
+// ✅ NEW: Export chat namespace so other modules can broadcast room_created
+let chatNs = undefined;
 
 export const runIo = (httpServer) => {
   io = new Server(httpServer, {
-    cors: "*",
+    cors: {
+      origin: process.env.FRONTEND_URL || "*",
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    // ✅ NEW: Max buffer size for file uploads
+    maxHttpBufferSize: 10e6, // 10MB
   });
 
-  io.on("connection", async (socket) => {
-    await registerSocket(socket, onlineUsers);
-    await sendMessage(socket, io);
-    await handleTyping(socket, io);
-    await handleReaction(socket, io);
+  // ── Chat namespace ────────────────────────────────────────────
+  chatNs = io.of("/chat");
+  registerChatSocket(chatNs);
 
-    await logoutSocketId(socket, onlineUsers);
+  // ── Default namespace ─────────────────────────────────────────
+  io.on("connection", async (socket) => {
+    await registerSocket(socket);
+    await logoutSocketId(socket);
   });
 };
 
@@ -28,6 +34,7 @@ export const getIo = () => {
   return io;
 };
 
-export const getOnlineUsers = () => {
-  return Array.from(onlineUsers.keys());
+// ✅ NEW: Get chat namespace for broadcasting room creation events
+export const getChatNamespace = () => {
+  return chatNs;
 };

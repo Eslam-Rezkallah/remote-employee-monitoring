@@ -1,24 +1,26 @@
+import { socketConnection } from "../../../DB/Model/user.model.js";
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
 
-export const registerSocket = async (socket, onlineUsers) => {
+export const registerSocket = async (socket) => {
   const { data, valid } = await authentication({ socket });
   if (!valid) {
     return socket.emit("socket_Error", data);
   }
-  onlineUsers.set(data?.user?._id?.toString(), socket.id);
-  socket.emit("onlineUsers", Array.from(onlineUsers.keys()));
-
+  const userId = data?.user?._id?.toString();
+  socketConnection.set(userId, socket.id);
+  // So notification.event.js can emit to io.to(`user_${userId}`)
+  socket.join(`user_${userId}`);
   return "done";
 };
-
-export const logoutSocketId = async (socket, onlineUsers) => {
+export const logoutSocketId = async (socket) => {
   return socket.on("disconnect", async () => {
     const { data, valid } = await authentication({ socket });
+    console.log({ data, valid });
     if (!valid) {
       return socket.emit("socket_Error", data);
     }
-    onlineUsers.delete(data?.user?._id?.toString());
-    socket.broadcast.emit("userOffline", data?.user?._id?.toString());
+    socketConnection.delete(data?.user?._id?.toString());
+    console.log(socketConnection);
 
     return "done";
   });

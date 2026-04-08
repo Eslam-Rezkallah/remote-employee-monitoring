@@ -1,62 +1,65 @@
 import mongoose from "mongoose";
 const { Schema, model, Types } = mongoose;
 
+export const chatRoomTypes = {
+  direct: "direct",
+  team: "team",
+  organization: "organization",
+  channel: "channel",
+  group: "group",
+};
+
 const chatRoomSchema = new Schema(
   {
-    name: {
-      type: String,
-      trim: true,
-    },
+    name: { type: String, trim: true, maxlength: 100, default: null },
+    description: { type: String, trim: true, maxlength: 500, default: null },
+    icon: { type: String, default: null },
+
     type: {
       type: String,
-      enum: ["private", "group", "project"],
+      enum: Object.values(chatRoomTypes),
       required: true,
     },
-    project: {
-      type: Types.ObjectId,
-      ref: "Project",
-    },
-    organization: {
+
+    organizationId: {
       type: Types.ObjectId,
       ref: "Organization",
-      required: true,
+      default: null,
     },
-    members: [
-      {
-        type: Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    lastMessage: {
-      type: Types.ObjectId,
-      ref: "Message",
+    teamId: { type: Types.ObjectId, ref: "Team", default: null },
+    projectId: { type: Types.ObjectId, ref: "Project", default: null },
+
+    members: [{ type: Types.ObjectId, ref: "User" }],
+    admins: [{ type: Types.ObjectId, ref: "User" }],
+
+    createdBy: { type: Types.ObjectId, ref: "User", required: true },
+
+    isPrivate: { type: Boolean, default: false },
+
+    lastMessage: { type: Types.ObjectId, ref: "Message", default: null },
+    lastMessageAt: { type: Date, default: null },
+
+    // ✅ NEW: Per-user unread message counts
+    // Stored as a Map: { "userId1": 3, "userId2": 0, ... }
+    unreadCounts: {
+      type: Map,
+      of: Number,
+      default: {},
     },
-    unreadCounts: [
-      {
-        user: { type: Types.ObjectId, ref: "User" },
-        count: { type: Number, default: 0 },
-      },
-    ],
-    pinnedMessages: [
-      {
-        type: Types.ObjectId,
-        ref: "Message",
-      },
-    ],
-    typingUsers: [
-      {
-        user: { type: Types.ObjectId, ref: "User" },
-        timestamp: { type: Date, default: Date.now },
-      },
-    ],
+
+    isArchived: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
-chatRoomSchema.index({ members: 1 });
-chatRoomSchema.index({ organization: 1 });
+// ── Indexes ────────────────────────────────────────────────────
+chatRoomSchema.index({ members: 1, isDeleted: 1 });
+chatRoomSchema.index({ organizationId: 1, type: 1, isDeleted: 1 });
+chatRoomSchema.index({ teamId: 1, type: 1, isDeleted: 1 });
+chatRoomSchema.index({ projectId: 1, type: 1, isDeleted: 1 });
+chatRoomSchema.index({ organizationId: 1, isDeleted: 1, lastMessageAt: -1 });
 chatRoomSchema.set("strictPopulate", false);
 
 const chatRoomModel =

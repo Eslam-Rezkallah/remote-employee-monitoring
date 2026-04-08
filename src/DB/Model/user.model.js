@@ -28,13 +28,12 @@ const userSchema = new Schema(
       unique: true,
       lowercase: true,
     },
-    password: {
-      type: String,
-      required: function () {
-        return this.provider === providerTypes.System;
-      },
-      select: true,
-    },
+   password: {
+  type: String,
+  required: function () {
+    return this.provider === providerTypes.system;
+  },
+},
     phone: {
       type: String,
       trim: true,
@@ -151,3 +150,4 @@ userSchema.index({ role: 1 });
 const userModel = mongoose.models.User || model("User", userSchema);
 
 export default userModel;
+export const socketConnection = new Map();

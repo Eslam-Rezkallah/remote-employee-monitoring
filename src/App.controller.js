@@ -10,6 +10,7 @@ import projectController from "./modules/project/project.controller.js";
 import teamController from "./modules/team/team.controller.js";
 import notificationController from "./modules/notification/notification.controller.js";
 import spaceController from "./modules/space/space.controller.js";
+import workSessionController from "./modules/workSession/workSession.controller.js";
 
 // ── Chat System ───────────────────────────────────────────────
 import chatRoomController from "./modules/chatroom/chat.room.controller.js";
@@ -18,6 +19,10 @@ import reactionController from "./modules/reaction/reaction.controller.js";
 
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
+import {
+  startIdleDetection,
+  recoverOrphanedSessions,
+} from "./utils/jobs/idle.detection.job.js";
 import cors from "cors";
 import path from "node:path";
 import rateLimit from "express-rate-limit";
@@ -68,6 +73,7 @@ export const bootstrap = async (app, express) => {
   app.use("/org/:orgId/projects", projectController);
   app.use("/teams", teamController);
   app.use("/org/:orgId/spaces", spaceController);
+  app.use("/work-session", workSessionController);
 
   // ── Chat Routes ───────────────────────────────────────────────
   // ChatRooms   → /chat/rooms
@@ -92,8 +98,18 @@ export const bootstrap = async (app, express) => {
   // ── Global Error Handler ──────────────────────────────────────
   app.use(globalErrorHandling);
 
-  // ── Database ─────────────────────────────────────────────────
-  connectDB();
+
+    // ── database ──────────────────────────────────────────────
+  await connectDB();
+ 
+  // ── work session boot hooks (run after DB is ready) ───────
+  await recoverOrphanedSessions();
+  startIdleDetection();
+
+
+  // // ── Database ─────────────────────────────────────────────────
+  // connectDB();
+
 };
 
 export default bootstrap;

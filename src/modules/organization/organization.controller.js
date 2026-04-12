@@ -2,7 +2,8 @@ import { Router } from "express";
 import { authentication } from "../../middleware/auth.middleware.js";
 import { validation } from "../../middleware/validation.middleware.js";
 import * as validators from "./organization.validation.js";
-import * as orgService from "./service/organization.service.js";
+import * as orgService from "./service/organization.service.js"
+import * as memberService from "./service/member.service.js";
 import * as invitationService from "./service/invitation.service.js";
 import spaceController from "../space/space.controller.js";
 import activityController from "../activity/activity.controller.js";
@@ -13,12 +14,18 @@ import {
 
 const router = Router();
 
+// ─────────────────────────────────────────────────────────────
+// INVITATIONS — public routes (no auth on validate)
+// ─────────────────────────────────────────────────────────────
+
+// GET /org/invitations/validate?token=  — preview invite before login
 router.get(
   "/invitations/validate",
   validation(validators.validateInvitation),
   invitationService.validateInvitation
 );
 
+// POST /org/invitations/accept  — accept invite (must be logged in)
 router.post(
   "/invitations/accept",
   authentication(),
@@ -26,15 +33,14 @@ router.post(
   invitationService.acceptInvitation
 );
 
-router.post(
-  "/:orgId/invitations",
-  authentication(),
-  validation(validators.createInvitation),
-  invitationService.createInvitation
-);
+// ─────────────────────────────────────────────────────────────
+// ORG CRUD
+// ─────────────────────────────────────────────────────────────
 
-router.use("/:orgId/spaces", spaceController);
+// GET /org/me  — all orgs the logged-in user belongs to
+router.get("/me", authentication(), orgService.getMyOrganizations);
 
+// POST /org  — create a new org
 router.post(
   "/",
   authentication(),
@@ -43,6 +49,15 @@ router.post(
   orgService.createOrg
 );
 
+// GET /org/:orgId  — get org details + member count + current user role
+router.get(
+  "/:orgId",
+  authentication(),
+  validation(validators.orgIdParam),
+  orgService.getOrg
+);
+
+// PATCH /org/:orgId  — update org info (owner/admin)
 router.patch(
   "/:orgId",
   authentication(),
@@ -51,12 +66,91 @@ router.patch(
   orgService.updateOrg
 );
 
+// DELETE /org/:orgId  — soft delete (owner only)
 router.delete(
   "/:orgId",
   authentication(),
   validation(validators.orgIdParam),
   orgService.deleteOrg
 );
+
+// ─────────────────────────────────────────────────────────────
+// MEMBERS
+// ─────────────────────────────────────────────────────────────
+
+// GET /org/:orgId/members  — list all members (any member can view)
+router.get(
+  "/:orgId/members",
+  authentication(),
+  validation(validators.listMembers),
+  memberService.getOrgMembers
+);
+
+// PATCH /org/:orgId/members/:memberId/role  — promote/demote (owner only)
+router.patch(
+  "/:orgId/members/:memberId/role",
+  authentication(),
+  validation(validators.changeMemberRole),
+  memberService.changeMemberRole
+);
+
+// DELETE /org/:orgId/members/:memberId  — remove member (owner/admin)
+router.delete(
+  "/:orgId/members/:memberId",
+  authentication(),
+  validation(validators.removeMemberParam),
+  memberService.removeMember
+);
+
+// ─────────────────────────────────────────────────────────────
+// INVITATIONS — org-scoped
+// ─────────────────────────────────────────────────────────────
+
+// POST /org/:orgId/invitations  — send email invite (owner/admin)
+router.post(
+  "/:orgId/invitations",
+  authentication(),
+  validation(validators.createInvitation),
+  invitationService.createInvitation
+);
+
+// ─────────────────────────────────────────────────────────────
+// WORK SESSIONS — admin monitoring (Time Doctor / Jira worklog)
+// ─────────────────────────────────────────────────────────────
+
+// GET /org/:orgId/work-sessions  — all sessions for admin
+router.get(
+  "/:orgId/work-sessions",
+  authentication(),
+  validation(validators.orgWorkSessions),
+  orgService.getOrgWorkSessions
+);
+
+// GET /org/:orgId/work-sessions/summary  — productivity per user
+router.get(
+  "/:orgId/work-sessions/summary",
+  authentication(),
+  validation(validators.orgWorkSessionsSummary),
+  orgService.getWorkSessionsSummary
+);
+
+// ─────────────────────────────────────────────────────────────
+// CHAT ROOMS — org scoped (Slack/Teams sidebar)
+// ─────────────────────────────────────────────────────────────
+
+// GET /org/:orgId/chat-rooms  — all chat rooms grouped by type
+router.get(
+  "/:orgId/chat-rooms",
+  authentication(),
+  validation(validators.orgIdParam),
+  orgService.getOrgChatRooms
+);
+
+// ─────────────────────────────────────────────────────────────
+// NESTED ROUTERS
+// ─────────────────────────────────────────────────────────────
+
+router.use("/:orgId/spaces", spaceController);
 router.use("/:orgId/activity", activityController);
 
 export default router;

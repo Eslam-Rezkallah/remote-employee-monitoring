@@ -3,10 +3,13 @@ import * as validators from "./auth.validation.js";
 import * as registrationService from "./service/registration.service.js";
 import { validation } from "../../middleware/validation.middleware.js";
 import * as loginService from "./service/login.service.js";
+// FIX: imports from its OWN service folder — NOT from organization module
 import * as organizationService from "./service/organization.service.js";
 import { authentication } from "../../middleware/auth.middleware.js";
+
 const router = Router();
 
+// ── Registration ──────────────────────────────────────────────
 router.post(
   "/signup",
   validation(validators.signup),
@@ -21,45 +24,48 @@ router.patch(
 
 router.post("/signupWithGoogle", registrationService.signupWithGoogle);
 
-// ... other imports , these are GET requests because they involve browser redirects!!
-
+// ── Login ─────────────────────────────────────────────────────
 router.post("/login", validation(validators.login), loginService.login);
+
 router.post("/loginWithGmail", loginService.loginWithGoogle);
+
 router.post(
   "/validate-login-otp",
   validation(validators.validateLoginOTP),
   loginService.validateLoginOTP,
 );
+
 router.post(
   "/verify-2step-verification",
   validation(validators.verify2StepVerification),
   loginService.verifyEnableTwoStepVerification,
 );
+
+// ── Password reset ────────────────────────────────────────────
 router.patch(
   "/forget-password",
   validation(validators.forgetPassword),
   loginService.forgetPassword,
 );
+
 router.patch(
   "/validate-forget-password",
   validation(validators.validateForgetPassword),
   loginService.validateForgetPassword,
 );
+
 router.patch(
   "/reset-password",
   validation(validators.resetPassword),
   loginService.resetPassword,
 );
 
-// router.post(
-//   "/org-create",
-//   authentication(),
-//   validation(validators.createOrganization),
-//   organizationService.createOrganizationController
-// );
-
+// ── Organization onboarding ───────────────────────────────────
+// FIX: authentication() added back — ownerId now comes from the token
+//      Previously missing, which was a security vulnerability
 router.post(
   "/org-create",
+  authentication(),
   validation(validators.createOrganization),
   organizationService.createOrganizationController,
 );

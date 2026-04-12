@@ -1,24 +1,26 @@
-import mongoose from "mongoose";
 import messageModel from "../../../DB/Model/message.model.js";
 import chatRoomModel from "../../../DB/Model/chatroom.model.js";
-import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
+import { getPagination } from "../../../utils/db/pagination.js";
 import { cloud } from "../../../utils/multer/cloudinary.multer.js";
 
-/* ============================================================
-   Constants
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────
+
 const EDIT_WINDOW_MS = 60 * 60 * 1000;
 const DELETE_WINDOW_MS = 60 * 60 * 1000;
 
-/* ============================================================
-   Shared helpers
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+
 async function requireRoomMember(roomId, userId) {
-  const room = await dbService.findOne({
-    model: chatRoomModel,
-    filter: { _id: roomId, members: userId, isDeleted: false },
+  const room = await chatRoomModel.findOne({
+    _id: roomId,
+    members: userId,
+    isDeleted: false,
   });
   if (!room)
     throw Object.assign(new Error("Room not found or access denied"), {
@@ -49,7 +51,7 @@ async function uploadAttachments(files, userId, roomId) {
     return "raw";
   };
 
-  const uploads = await Promise.all(
+  return Promise.all(
     files.map(async (file) => {
       const result = await cloud.uploader.upload(file.path, {
         folder,
@@ -66,13 +68,12 @@ async function uploadAttachments(files, userId, roomId) {
       };
     }),
   );
-
-  return uploads;
 }
 
-/* ============================================================
-   POST /chat/rooms/:roomId/messages — Send a message
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// POST /chat/rooms/:roomId/messages  — Send
+// ─────────────────────────────────────────────────────────────
+
 export const sendMessage = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
@@ -81,9 +82,10 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
   await requireRoomMember(roomId, userId);
 
   if (replyTo) {
-    const parent = await dbService.findOne({
-      model: messageModel,
-      filter: { _id: replyTo, chatRoomId: roomId, deletedForEveryone: false },
+    const parent = await messageModel.findOne({
+      _id: replyTo,
+      chatRoomId: roomId,
+      deletedForEveryone: false,
     });
     if (!parent)
       return next(new Error("Reply target not found", { cause: 404 }));
@@ -105,23 +107,19 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
       attachments[0].type === "voice" ? "voice" : attachments[0].type;
   }
 
-  const message = await dbService.create({
-    model: messageModel,
-    data: {
-      chatRoomId: roomId,
-      senderId: userId,
-      content: content.trim(),
-      messageType: resolvedType,
-      attachments,
-      replyTo: replyTo || null,
-    },
+  const message = await messageModel.create({
+    chatRoomId: roomId,
+    senderId: userId,
+    content: content.trim(),
+    messageType: resolvedType,
+    attachments,
+    replyTo: replyTo || null,
   });
 
-  await dbService.updateOne({
-    model: chatRoomModel,
-    filter: { _id: roomId },
-    data: { lastMessage: message._id, lastMessageAt: new Date() },
-  });
+  await chatRoomModel.updateOne(
+    { _id: roomId },
+    { lastMessage: message._id, lastMessageAt: new Date() },
+  );
 
   const populated = await messageModel
     .findById(message._id)
@@ -135,27 +133,26 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
   );
 });
 
-/* ============================================================
-   GET /chat/rooms/:roomId/messages — Paginated history
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// GET /chat/rooms/:roomId/messages  — History
+// FIX: was manual skip calc — now uses getPagination
+// ─────────────────────────────────────────────────────────────
+
 export const listMessages = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
-  const { page = 1, limit = 30, before } = req.query;
+  const { before } = req.query;
 
   await requireRoomMember(roomId, userId);
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page, limit, skip } = getPagination(req.query);
 
   const filter = {
     chatRoomId: roomId,
     deletedForEveryone: false,
     deletedFor: { $ne: userId },
   };
-
-  if (before) {
-    filter.createdAt = { $lt: new Date(before) };
-  }
+  if (before) filter.createdAt = { $lt: new Date(before) };
 
   const [messages, total] = await Promise.all([
     messageModel
@@ -169,40 +166,39 @@ export const listMessages = asyncHandler(async (req, res, next) => {
       })
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean(),
     messageModel.countDocuments(filter),
   ]);
 
+  // flip to oldest-first within the page
   messages.reverse();
-
-  // ✅ NEW: Return hasMore flag for infinite scroll
-  const hasMore = skip + parseInt(limit) < total;
 
   return successResponse({
     res,
     data: {
       messages,
       total,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      hasMore,
+      page,
+      limit,
+      hasMore: skip + limit < total,
     },
   });
 });
 
-/* ============================================================
-   ✅ NEW: GET /chat/rooms/:roomId/messages/search?q=&page=&limit=
-   Feature 1: Full-text search on message content
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// GET /chat/rooms/:roomId/messages/search
+// FIX: uses getPagination
+// ─────────────────────────────────────────────────────────────
+
 export const searchMessages = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
-  const { q, page = 1, limit = 20 } = req.query;
+  const { q } = req.query;
 
   await requireRoomMember(roomId, userId);
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const { page, limit, skip } = getPagination(req.query);
 
   const filter = {
     chatRoomId: roomId,
@@ -217,7 +213,7 @@ export const searchMessages = asyncHandler(async (req, res, next) => {
       .populate("senderId", "username email image")
       .sort({ score: { $meta: "textScore" } })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(limit)
       .lean(),
     messageModel.countDocuments(filter),
   ]);
@@ -227,22 +223,22 @@ export const searchMessages = asyncHandler(async (req, res, next) => {
     data: {
       messages,
       total,
-      page: parseInt(page),
-      limit: parseInt(limit),
+      page,
+      limit,
       query: q,
-      hasMore: skip + parseInt(limit) < total,
+      hasMore: skip + limit < total,
     },
   });
 });
 
-/* ============================================================
-   ✅ NEW: GET /chat/rooms/unread-counts
-   Feature 4: Unread message count per room
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// GET /chat/rooms/unread-counts
+// FIX: was raw chatRoomModel.find() with no .lean()
+// ─────────────────────────────────────────────────────────────
+
 export const getUnreadCounts = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
 
-  // Get all rooms the user is in
   const rooms = await chatRoomModel
     .find({ members: userId, isDeleted: false })
     .select("_id")
@@ -250,7 +246,6 @@ export const getUnreadCounts = asyncHandler(async (req, res, next) => {
 
   const roomIds = rooms.map((r) => r._id);
 
-  // Aggregate unread counts per room
   const unreadCounts = await messageModel.aggregate([
     {
       $match: {
@@ -269,24 +264,20 @@ export const getUnreadCounts = asyncHandler(async (req, res, next) => {
     },
   ]);
 
-  // Convert to a map: { roomId: count }
   const counts = {};
   for (const item of unreadCounts) {
     counts[item._id.toString()] = item.count;
   }
 
-  // Total unread across all rooms
   const totalUnread = unreadCounts.reduce((sum, item) => sum + item.count, 0);
 
-  return successResponse({
-    res,
-    data: { counts, totalUnread },
-  });
+  return successResponse({ res, data: { counts, totalUnread } });
 });
 
-/* ============================================================
-   PATCH — Edit a message
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// PATCH /:messageId  — Edit
+// ─────────────────────────────────────────────────────────────
+
 export const editMessage = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
   const userId = req.user._id;
@@ -294,32 +285,26 @@ export const editMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: {
-      _id: messageId,
-      chatRoomId: roomId,
-      deletedForEveryone: false,
-    },
+  const message = await messageModel.findOne({
+    _id: messageId,
+    chatRoomId: roomId,
+    deletedForEveryone: false,
   });
-
   if (!message) return next(new Error("Message not found", { cause: 404 }));
-  if (message.senderId.toString() !== userId.toString()) {
+  if (message.senderId.toString() !== userId.toString())
     return next(new Error("Can only edit your own messages", { cause: 403 }));
-  }
 
   const age = Date.now() - new Date(message.createdAt).getTime();
-  if (age > EDIT_WINDOW_MS) {
+  if (age > EDIT_WINDOW_MS)
     return next(new Error("Edit window expired (1 hour)", { cause: 403 }));
-  }
 
-  const updated = await dbService.findOneAndUpdate({
-    model: messageModel,
-    filter: { _id: messageId },
-    data: { content: content.trim(), edited: true, editedAt: new Date() },
-    options: { new: true },
-    populate: [{ path: "senderId", select: "username image" }],
-  });
+  const updated = await messageModel
+    .findOneAndUpdate(
+      { _id: messageId },
+      { content: content.trim(), edited: true, editedAt: new Date() },
+      { new: true },
+    )
+    .populate("senderId", "username image");
 
   return successResponse({
     res,
@@ -328,9 +313,10 @@ export const editMessage = asyncHandler(async (req, res, next) => {
   });
 });
 
-/* ============================================================
-   DELETE — Delete a message
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// DELETE /:messageId
+// ─────────────────────────────────────────────────────────────
+
 export const deleteMessage = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
   const userId = req.user._id;
@@ -338,73 +324,63 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  const message = await dbService.findOne({
-    model: messageModel,
-    filter: {
-      _id: messageId,
-      chatRoomId: roomId,
-      deletedForEveryone: false,
-    },
+  const message = await messageModel.findOne({
+    _id: messageId,
+    chatRoomId: roomId,
+    deletedForEveryone: false,
   });
-
   if (!message) return next(new Error("Message not found", { cause: 404 }));
 
   const age = Date.now() - new Date(message.createdAt).getTime();
 
   if (deleteType === "everyone") {
-    if (message.senderId.toString() !== userId.toString()) {
+    if (message.senderId.toString() !== userId.toString())
       return next(
         new Error("Can only delete your own messages for everyone", {
           cause: 403,
         }),
       );
-    }
-    if (age > DELETE_WINDOW_MS) {
+    if (age > DELETE_WINDOW_MS)
       return next(
         new Error("Delete-for-everyone window expired (1 hour)", {
           cause: 403,
         }),
       );
-    }
 
-    await dbService.updateOne({
-      model: messageModel,
-      filter: { _id: messageId },
-      data: {
+    await messageModel.updateOne(
+      { _id: messageId },
+      {
         deletedForEveryone: true,
         deleted: true,
         content: "",
         attachments: [],
       },
-    });
+    );
 
     return successResponse({ res, message: "Message deleted for everyone" });
   }
 
-  await dbService.updateOne({
-    model: messageModel,
-    filter: { _id: messageId },
-    data: { $addToSet: { deletedFor: userId } },
-  });
+  await messageModel.updateOne(
+    { _id: messageId },
+    { $addToSet: { deletedFor: userId } },
+  );
 
   return successResponse({ res, message: "Message deleted for you" });
 });
 
-/* ============================================================
-   PATCH — Mark seen
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// PATCH /:messageId/seen
+// ─────────────────────────────────────────────────────────────
+
 export const markSeen = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
   const userId = req.user._id;
 
   await requireRoomMember(roomId, userId);
 
-  const pivotMsg = await dbService.findOne({
-    model: messageModel,
-    filter: { _id: messageId, chatRoomId: roomId },
-    select: "createdAt",
-  });
-
+  const pivotMsg = await messageModel
+    .findOne({ _id: messageId, chatRoomId: roomId })
+    .select("createdAt");
   if (!pivotMsg) return next(new Error("Message not found", { cause: 404 }));
 
   const result = await messageModel.updateMany(
@@ -424,24 +400,24 @@ export const markSeen = asyncHandler(async (req, res, next) => {
   });
 });
 
-/* ============================================================
-   PATCH — Mark delivered
-============================================================ */
+// ─────────────────────────────────────────────────────────────
+// PATCH /:messageId/delivered
+// ─────────────────────────────────────────────────────────────
+
 export const markDelivered = asyncHandler(async (req, res, next) => {
   const { roomId, messageId } = req.params;
   const userId = req.user._id;
 
   await requireRoomMember(roomId, userId);
 
-  await dbService.updateOne({
-    model: messageModel,
-    filter: {
+  await messageModel.updateOne(
+    {
       _id: messageId,
       chatRoomId: roomId,
       "deliveredTo.userId": { $ne: userId },
     },
-    data: { $addToSet: { deliveredTo: { userId, deliveredAt: new Date() } } },
-  });
+    { $addToSet: { deliveredTo: { userId, deliveredAt: new Date() } } },
+  );
 
   return successResponse({ res, message: "Message marked as delivered" });
 });

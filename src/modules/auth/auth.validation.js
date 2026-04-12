@@ -1,5 +1,6 @@
 import joi from "joi";
 import { generalFields } from "../../middleware/validation.middleware.js";
+
 export const signup = joi
   .object()
   .keys({
@@ -9,6 +10,7 @@ export const signup = joi
     confirmPassword: generalFields.confirmPassword.required(),
   })
   .required();
+
 export const confirmEmail = joi
   .object()
   .keys({
@@ -26,13 +28,16 @@ export const login = joi
   })
   .xor("email", "phone")
   .required();
+
 export const forgetPassword = joi
   .object()
   .keys({
     email: generalFields.email.required(),
   })
   .required();
+
 export const validateForgetPassword = confirmEmail;
+
 export const resetPassword = joi
   .object()
   .keys({
@@ -43,6 +48,7 @@ export const resetPassword = joi
       .required(),
   })
   .required();
+
 export const validateLoginOTP = joi
   .object()
   .keys({
@@ -50,6 +56,7 @@ export const validateLoginOTP = joi
     code: generalFields.code.required(),
   })
   .required();
+
 export const verify2StepVerification = joi
   .object()
   .keys({
@@ -58,22 +65,20 @@ export const verify2StepVerification = joi
   })
   .required();
 
-// export const createOrganization = joi
-//   .object()
-//   .keys({
-//     name: joi.string().min(2).max(100).trim().required(),
-//     slug: joi.string().min(2).max(100).lowercase().trim().pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-//     logo: joi.string().uri(),
-//   })
-//   .required();
-
+// FIX: removed ownerId — it comes from req.user._id (token), not the body
 export const createOrganization = joi
   .object()
   .keys({
     name: joi.string().min(2).max(100).trim().required(),
-    slug: joi.string().min(2).max(100).lowercase().trim().pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-    logo: joi.string().uri(),
-    ownerId: generalFields.id.required(),
+    slug: joi
+      .string()
+      .min(2)
+      .max(100)
+      .lowercase()
+      .trim()
+      .pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+      .optional(),
+    logo: joi.string().uri().optional(),
   })
   .required();
 

@@ -127,3 +127,8 @@ export const deleteMany = async ({ model, filter = {} }) => {
   const document = await model.deleteMany(filter);
   return document;
 };
+
+export const countDocuments = async ({ model, filter = {} }) => {
+  const count = await model.countDocuments(filter);
+  return count;
+}

@@ -21,6 +21,8 @@ const chatRoomSchema = new Schema(
       required: true,
     },
 
+    // FIX: organizationId is now REQUIRED for all room types except legacy.
+    //      DMs also get an organizationId so they can be scoped properly.
     organizationId: {
       type: Types.ObjectId,
       ref: "Organization",
@@ -39,13 +41,11 @@ const chatRoomSchema = new Schema(
     lastMessage: { type: Types.ObjectId, ref: "Message", default: null },
     lastMessageAt: { type: Date, default: null },
 
-    // ✅ NEW: Per-user unread message counts
-    // Stored as a Map: { "userId1": 3, "userId2": 0, ... }
-    unreadCounts: {
-      type: Map,
-      of: Number,
-      default: {},
-    },
+    // FIX: removed `unreadCounts` Map field.
+    //      Unread counts are computed via message aggregation in
+    //      message.service.js → getUnreadCounts(). The map was written
+    //      by the socket layer but never read by the REST endpoint,
+    //      creating two competing systems that drifted apart.
 
     isArchived: { type: Boolean, default: false },
     isDeleted: { type: Boolean, default: false },

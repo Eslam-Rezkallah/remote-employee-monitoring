@@ -61,14 +61,6 @@ router.patch(
 );
 
 // ── Organization onboarding ───────────────────────────────────
-// FIX: authentication() added back — ownerId now comes from the token
-//      Previously missing, which was a security vulnerability
-router.post(
-  "/org-create",
-  authentication(),
-  validation(validators.createOrganization),
-  organizationService.createOrganizationController,
-);
 
 router.post(
   "/org-join",

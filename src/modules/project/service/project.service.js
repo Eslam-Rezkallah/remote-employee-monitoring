@@ -8,7 +8,7 @@ import { notificationEvent } from "../../../utils/events/notification.event.js";
 
 // ── Shared populate config ────────────────────────────────────
 const projectPopulate = [
-  { path: "team", select: "name description" },
+  { path: "team", select: "name description organizationId" },
   { path: "manager", select: "username email image" },
   { path: "members", select: "username email image" },
   { path: "tasks", select: "title status priority dueDate assigneeId" },
@@ -38,6 +38,8 @@ const canCreateProject = (team, userId, membership) =>
 
 // ─────────────────────────────────────────────────────────────
 // CREATE
+// FIX: team filter now includes organizationId to prevent
+//      cross-org team references
 // ─────────────────────────────────────────────────────────────
 export const createProject = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
@@ -51,7 +53,6 @@ export const createProject = asyncHandler(async (req, res, next) => {
     members = [],
   } = req.body;
 
-  // 1. Verify requesting user is an active org member
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
@@ -59,17 +60,18 @@ export const createProject = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // 2. Verify the team exists and belongs to this org
+  // FIX: verify team exists AND belongs to THIS org
   const team = await dbService.findOne({
     model: teamModel,
-    filter: { _id: teamId, isDeleted: false },
+    filter: { _id: teamId, organizationId: orgId, isDeleted: false },
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    return next(
+      new Error("Team not found in this organization", { cause: 404 }),
+    );
   }
 
-  // 3. Check create permission
   if (!canCreateProject(team, req.user._id, membership)) {
     return next(
       new Error(
@@ -79,7 +81,6 @@ export const createProject = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // 4. ✅ Fix: find + length instead of countDocuments
   if (members.length > 0) {
     const validMembers = await dbService.find({
       model: memberModel,
@@ -100,14 +101,10 @@ export const createProject = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // 5. Validate dates
   if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
-    return next(
-      new Error("End date must be after start date", { cause: 400 }),
-    );
+    return next(new Error("End date must be after start date", { cause: 400 }));
   }
 
-  // 6. Creator is always a member
   const uniqueMembers = [
     ...new Set([
       ...members.map((id) => id.toString()),
@@ -136,7 +133,6 @@ export const createProject = asyncHandler(async (req, res, next) => {
     populate: projectPopulate,
   });
 
-  // Notify added members (excluding creator)
   const otherMembers = uniqueMembers.filter(
     (id) => id !== req.user._id.toString(),
   );
@@ -178,7 +174,6 @@ export const listProjects = asyncHandler(async (req, res, next) => {
 
   const filter = { organizationId: orgId, isDeleted: { $ne: true } };
 
-  // Non-admins only see projects they are a member of
   if (!isOrgAdminOrOwner(membership)) {
     filter.members = req.user._id;
   }
@@ -187,7 +182,6 @@ export const listProjects = asyncHandler(async (req, res, next) => {
   if (teamId) filter.team = teamId;
   if (search) filter.$text = { $search: search };
 
-  // ✅ Fix: findAll → find, skip/limit as direct params (no options wrapper)
   const projects = await dbService.find({
     model: projectModel,
     filter,
@@ -200,7 +194,6 @@ export const listProjects = asyncHandler(async (req, res, next) => {
     limit,
   });
 
-  // ✅ Fix: countDocuments removed — use length instead
   const total = projects.length;
 
   return successResponse({
@@ -232,7 +225,11 @@ export const getProject = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
     populate: projectPopulate,
   });
 
@@ -240,7 +237,6 @@ export const getProject = asyncHandler(async (req, res, next) => {
     return next(new Error("Project not found", { cause: 404 }));
   }
 
-  // Non-admins must be a project member to view details
   const isMember = project.members.some(
     (m) => m._id.toString() === req.user._id.toString(),
   );
@@ -270,7 +266,11 @@ export const updateProject = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {
@@ -286,14 +286,11 @@ export const updateProject = asyncHandler(async (req, res, next) => {
     );
   }
 
-  // Cross-validate dates using existing values as fallback
   const resolvedStart = startDate ? new Date(startDate) : project.startDate;
   const resolvedEnd = endDate ? new Date(endDate) : project.endDate;
 
   if (resolvedStart && resolvedEnd && resolvedEnd <= resolvedStart) {
-    return next(
-      new Error("End date must be after start date", { cause: 400 }),
-    );
+    return next(new Error("End date must be after start date", { cause: 400 }));
   }
 
   const updateData = {};
@@ -333,7 +330,11 @@ export const updateProjectStatus = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {
@@ -387,24 +388,26 @@ export const transferManager = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {
     return next(new Error("Project not found", { cause: 404 }));
   }
 
-  // New manager must already be a project member
   const isMember = project.members
     .map((m) => m.toString())
     .includes(newManagerId);
 
   if (!isMember) {
     return next(
-      new Error(
-        "New manager must already be a member of the project",
-        { cause: 400 },
-      ),
+      new Error("New manager must already be a member of the project", {
+        cause: 400,
+      }),
     );
   }
 
@@ -444,7 +447,11 @@ export const addMember = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {
@@ -453,21 +460,18 @@ export const addMember = asyncHandler(async (req, res, next) => {
 
   if (!canManageProject(project, req.user._id, membership)) {
     return next(
-      new Error(
-        "Only the project manager or org Admin/Owner can add members",
-        { cause: 403 },
-      ),
+      new Error("Only the project manager or org Admin/Owner can add members", {
+        cause: 403,
+      }),
     );
   }
 
-  // Target user must be an active org member
   const targetMembership = await getOrgMembership(memberId, orgId);
   if (!targetMembership) {
     return next(
-      new Error(
-        "User is not an active member of this organization",
-        { cause: 400 },
-      ),
+      new Error("User is not an active member of this organization", {
+        cause: 400,
+      }),
     );
   }
 
@@ -519,7 +523,11 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {
@@ -544,9 +552,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     );
   }
 
-  const isMember = project.members
-    .map((m) => m.toString())
-    .includes(memberId);
+  const isMember = project.members.map((m) => m.toString()).includes(memberId);
 
   if (!isMember) {
     return next(
@@ -585,13 +591,19 @@ export const deleteProject = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!isOrgAdminOrOwner(membership)) {
     return next(
-      new Error("Only org Admins or Owners can delete projects", { cause: 403 }),
+      new Error("Only org Admins or Owners can delete projects", {
+        cause: 403,
+      }),
     );
   }
 
   const project = await dbService.findOne({
     model: projectModel,
-    filter: { _id: projectId, organizationId: orgId, isDeleted: { $ne: true } },
+    filter: {
+      _id: projectId,
+      organizationId: orgId,
+      isDeleted: { $ne: true },
+    },
   });
 
   if (!project) {

@@ -12,6 +12,8 @@ import workSessionController from "./modules/workSession/workSession.controller.
 import chatRoomController from "./modules/chatroom/chat.room.controller.js";
 import messageController from "./modules/message/message.controller.js";
 import reactionController from "./modules/reaction/reaction.controller.js";
+// NEW: call history REST routes
+import callController from "./modules/call/call.controller.js";
 
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
@@ -56,15 +58,10 @@ export const bootstrap = async (app, express) => {
   app.use("/uploads", express.static(path.resolve("./src/uploads")));
 
   // ── Routes ────────────────────────────────────────────────────
-  // FIX: was mounted TWICE — removed the duplicate
   app.use("/auth", authController);
   app.use("/user", userController);
-
-  // FIX: /org/:orgId/spaces and /org/:orgId/activity are nested INSIDE
-  //      organizationController — do NOT mount them separately here
   app.use("/org", organizationController);
   app.use("/org/:orgId/projects", projectController);
-
   app.use("/sprints", sprintStatusController);
   app.use("/me", meController);
   app.use("/stars", starController);
@@ -80,6 +77,10 @@ export const bootstrap = async (app, express) => {
     "/chat/rooms/:roomId/messages/:messageId/reactions",
     reactionController,
   );
+
+  // ── Calls (REST — history + active check) ─────────────────────
+  // Real-time signaling happens via Socket.IO /call namespace
+  app.use("/chat/rooms/:roomId/calls", callController);
 
   // ── 404 ───────────────────────────────────────────────────────
   app.all("*", (req, res, next) => {

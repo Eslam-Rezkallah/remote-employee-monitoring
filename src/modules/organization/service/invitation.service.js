@@ -20,8 +20,12 @@ async function requireOrgRole({ orgId, userId, roles }) {
     model: memberModel,
     filter: { organizationId: orgId, userId, isActive: true },
   });
-  if (!member) throw new Error("You are not a member of this organization", { cause: 403 });
-  if (!roles.includes(member.role)) throw new Error("Not authorized", { cause: 403 });
+  if (!member)
+    throw new Error("You are not a member of this organization", {
+      cause: 403,
+    });
+  if (!roles.includes(member.role))
+    throw new Error("Not authorized", { cause: 403 });
   return member;
 }
 
@@ -57,7 +61,9 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
       },
     });
     if (activeMembership) {
-      return next(new Error("User is already an active member", { cause: 409 }));
+      return next(
+        new Error("User is already an active member", { cause: 409 }),
+      );
     }
   }
 
@@ -67,12 +73,14 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
       email: normalizedEmail,
       status: invitationStatus.Pending,
     },
-    { status: invitationStatus.Revoked }
+    { status: invitationStatus.Revoked },
   );
 
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
-  const expiresAt = new Date(Date.now() + INVITE_EXPIRES_DAYS * 24 * 60 * 60 * 1000);
+  const expiresAt = new Date(
+    Date.now() + INVITE_EXPIRES_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const invitation = await dbService.create({
     model: invitationModel,
@@ -123,7 +131,9 @@ export const validateInvitation = asyncHandler(async (req, res, next) => {
     .populate("organizationId", "name slug logo isActive isDeleted");
 
   if (!invitation) {
-    return next(new Error("Invitation not found or already used", { cause: 404 }));
+    return next(
+      new Error("Invitation not found or already used", { cause: 404 }),
+    );
   }
 
   if (invitation.expiresAt < new Date()) {
@@ -132,7 +142,11 @@ export const validateInvitation = asyncHandler(async (req, res, next) => {
     return next(new Error("Invitation expired", { cause: 410 }));
   }
 
-  if (!invitation.organizationId || invitation.organizationId.isDeleted || !invitation.organizationId.isActive) {
+  if (
+    !invitation.organizationId ||
+    invitation.organizationId.isDeleted ||
+    !invitation.organizationId.isActive
+  ) {
     return next(new Error("Organization is not available", { cause: 404 }));
   }
 
@@ -158,7 +172,9 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
   });
 
   if (!invitation) {
-    return next(new Error("Invitation not found or already used", { cause: 404 }));
+    return next(
+      new Error("Invitation not found or already used", { cause: 404 }),
+    );
   }
 
   if (invitation.expiresAt < new Date()) {
@@ -168,12 +184,18 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
   }
 
   if (req.user.email.toLowerCase() !== invitation.email) {
-    return next(new Error("This invitation belongs to another email", { cause: 403 }));
+    return next(
+      new Error("This invitation belongs to another email", { cause: 403 }),
+    );
   }
 
   const org = await dbService.findOne({
     model: organizationModel,
-    filter: { _id: invitation.organizationId, isDeleted: false, isActive: true },
+    filter: {
+      _id: invitation.organizationId,
+      isDeleted: false,
+      isActive: true,
+    },
   });
   if (!org) return next(new Error("Organization not found", { cause: 404 }));
 
@@ -211,10 +233,8 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
     await membership.save();
   }
 
-  if (!org.members.includes(req.user.username)) {
-    org.members.push(req.user.username);
-    await org.save();
-  }
+  // FIX: removed `org.members.push(req.user.username); await org.save();`
+  //      Membership is tracked via the Member collection exclusively.
 
   invitation.status = invitationStatus.Accepted;
   invitation.acceptedAt = new Date();

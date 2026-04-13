@@ -10,7 +10,6 @@ const organizationSchema = new mongoose.Schema(
     slug: {
       type: String,
       required: true,
-      // unique: true, // Commented out to avoid duplicate index warning - index created below
       lowercase: true,
       trim: true,
     },
@@ -21,7 +20,6 @@ const organizationSchema = new mongoose.Schema(
     joinCode: {
       type: String,
       required: true,
-      // unique: true, // Commented out to avoid duplicate index warning - index created below
       uppercase: true,
     },
     ownerId: {
@@ -29,16 +27,10 @@ const organizationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    members: {
-      type: [String],
-      default: [],
-    },
     isActive: {
       type: Boolean,
       default: true,
     },
-    // Soft delete flag
-    //Added
     isDeleted: {
       type: Boolean,
       default: false,
@@ -46,13 +38,40 @@ const organizationSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
-// Index for faster queries
-organizationSchema.index({ slug: 1 }, { unique: true }); // Unique index for slug
+// ── Indexes ───────────────────────────────────────────────────
+// FIX: partialFilterExpression ensures deleted orgs don't block
+//      new orgs from using the same name/slug/joinCode.
+organizationSchema.index(
+  { name: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false },
+    name: "unique_name_active",
+  },
+);
+
+organizationSchema.index(
+  { slug: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false },
+    name: "unique_slug_active",
+  },
+);
+
+organizationSchema.index(
+  { joinCode: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { isDeleted: false },
+    name: "unique_joincode_active",
+  },
+);
+
 organizationSchema.index({ ownerId: 1 });
-organizationSchema.index({ joinCode: 1 }, { unique: true }); // Unique index for joinCode
 
 const organizationModel = mongoose.model("Organization", organizationSchema);
 

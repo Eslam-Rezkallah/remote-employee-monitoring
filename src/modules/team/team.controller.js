@@ -11,21 +11,19 @@ import { roleTypes } from "../../DB/Model/user.model.js";
 const router = Router();
 
 // ── Create ────────────────────────────────────────────────────
-
 // POST /teams
-// Admin creates a new team
+// FIX: removed authorization([roleTypes.Admin]) — the service now
+//      checks org-level roles (owner/admin) via requireOrgMember().
+//      System Admin can still create teams because isManagerOrAdmin()
+//      checks user.role === Admin as a fallback.
 router.post(
   "/",
   authentication(),
-  authorization([roleTypes.Admin]),
   validation(validators.createTeam),
   teamService.createTeam,
 );
 
 // ── Read ──────────────────────────────────────────────────────
-
-// GET /teams
-// List all teams the requesting user belongs to (Admin sees all)
 router.get(
   "/",
   authentication(),
@@ -33,8 +31,6 @@ router.get(
   teamService.listTeams,
 );
 
-// GET /teams/:teamId
-// Get a single team with full details
 router.get(
   "/:teamId",
   authentication(),
@@ -43,9 +39,6 @@ router.get(
 );
 
 // ── Update ────────────────────────────────────────────────────
-
-// PATCH /teams/:teamId
-// Update team name / description (Admin or team manager)
 router.patch(
   "/:teamId",
   authentication(),
@@ -54,9 +47,6 @@ router.patch(
 );
 
 // ── Members ───────────────────────────────────────────────────
-
-// POST /teams/:teamId/members/:userId
-// Add a member to the team (Admin or team manager)
 router.post(
   "/:teamId/members/:userId",
   authentication(),
@@ -64,8 +54,6 @@ router.post(
   teamService.addMember,
 );
 
-// DELETE /teams/:teamId/members/:userId
-// Remove a member from the team (Admin or team manager)
 router.delete(
   "/:teamId/members/:userId",
   authentication(),
@@ -74,9 +62,6 @@ router.delete(
 );
 
 // ── Managers ──────────────────────────────────────────────────
-
-// POST /teams/:teamId/managers/:userId
-// Promote a member to manager (Admin only)
 router.post(
   "/:teamId/managers/:userId",
   authentication(),
@@ -85,8 +70,6 @@ router.post(
   teamService.addManager,
 );
 
-// DELETE /teams/:teamId/managers/:userId
-// Demote a manager back to member (Admin only)
 router.delete(
   "/:teamId/managers/:userId",
   authentication(),
@@ -96,9 +79,6 @@ router.delete(
 );
 
 // ── Delete ────────────────────────────────────────────────────
-
-// DELETE /teams/:teamId
-// Soft-delete the team (Admin only)
 router.delete(
   "/:teamId",
   authentication(),

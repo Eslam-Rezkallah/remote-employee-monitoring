@@ -4,6 +4,8 @@ import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
 import { cloud } from "../../../utils/multer/cloudinary.multer.js";
+// FIX: import chat namespace so REST handlers can emit socket events
+import { getChatNamespace } from "../../socket/socket.controller.js";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -70,8 +72,24 @@ async function uploadAttachments(files, userId, roomId) {
   );
 }
 
+/**
+ * FIX: helper to safely emit to the chat namespace.
+ * Returns silently if socket.io isn't initialized yet.
+ */
+function emitToRoom(roomId, event, payload) {
+  try {
+    const chatNs = getChatNamespace();
+    if (chatNs) {
+      chatNs.to(`room:${roomId}`).emit(event, payload);
+    }
+  } catch (_) {
+    // socket not initialized — skip silently
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/:roomId/messages  — Send
+// FIX: now emits receive_message via socket after saving
 // ─────────────────────────────────────────────────────────────
 
 export const sendMessage = asyncHandler(async (req, res, next) => {
@@ -127,6 +145,12 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
     .populate("replyTo", "content senderId messageType")
     .lean();
 
+  // FIX: broadcast to socket so other members see the message in real-time
+  emitToRoom(roomId, "receive_message", {
+    message: populated,
+    roomId,
+  });
+
   return successResponse(
     { res, data: { message: populated }, message: "Message sent" },
     201,
@@ -135,7 +159,6 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms/:roomId/messages  — History
-// FIX: was manual skip calc — now uses getPagination
 // ─────────────────────────────────────────────────────────────
 
 export const listMessages = asyncHandler(async (req, res, next) => {
@@ -171,7 +194,6 @@ export const listMessages = asyncHandler(async (req, res, next) => {
     messageModel.countDocuments(filter),
   ]);
 
-  // flip to oldest-first within the page
   messages.reverse();
 
   return successResponse({
@@ -188,7 +210,6 @@ export const listMessages = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms/:roomId/messages/search
-// FIX: uses getPagination
 // ─────────────────────────────────────────────────────────────
 
 export const searchMessages = asyncHandler(async (req, res, next) => {
@@ -233,7 +254,7 @@ export const searchMessages = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms/unread-counts
-// FIX: was raw chatRoomModel.find() with no .lean()
+// Uses message aggregation (single source of truth for unread counts)
 // ─────────────────────────────────────────────────────────────
 
 export const getUnreadCounts = asyncHandler(async (req, res, next) => {
@@ -276,6 +297,7 @@ export const getUnreadCounts = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /:messageId  — Edit
+// FIX: now emits message_edited via socket
 // ─────────────────────────────────────────────────────────────
 
 export const editMessage = asyncHandler(async (req, res, next) => {
@@ -298,13 +320,24 @@ export const editMessage = asyncHandler(async (req, res, next) => {
   if (age > EDIT_WINDOW_MS)
     return next(new Error("Edit window expired (1 hour)", { cause: 403 }));
 
+  const editedAt = new Date();
+
   const updated = await messageModel
     .findOneAndUpdate(
       { _id: messageId },
-      { content: content.trim(), edited: true, editedAt: new Date() },
+      { content: content.trim(), edited: true, editedAt },
       { new: true },
     )
     .populate("senderId", "username image");
+
+  // FIX: notify room members via socket
+  emitToRoom(roomId, "message_edited", {
+    roomId,
+    messageId,
+    content: content.trim(),
+    editedAt,
+    editedBy: userId,
+  });
 
   return successResponse({
     res,
@@ -315,6 +348,7 @@ export const editMessage = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // DELETE /:messageId
+// FIX: now emits message_deleted via socket
 // ─────────────────────────────────────────────────────────────
 
 export const deleteMessage = asyncHandler(async (req, res, next) => {
@@ -357,6 +391,14 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
       },
     );
 
+    // FIX: notify room members via socket
+    emitToRoom(roomId, "message_deleted", {
+      roomId,
+      messageId,
+      deleteType: "everyone",
+      deletedBy: userId,
+    });
+
     return successResponse({ res, message: "Message deleted for everyone" });
   }
 
@@ -370,6 +412,7 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /:messageId/seen
+// FIX: now emits messages_seen via socket
 // ─────────────────────────────────────────────────────────────
 
 export const markSeen = asyncHandler(async (req, res, next) => {
@@ -392,6 +435,19 @@ export const markSeen = asyncHandler(async (req, res, next) => {
     },
     { $addToSet: { seenBy: { userId, seenAt: new Date() } } },
   );
+
+  // FIX: notify room members about read receipts via socket
+  if (result.modifiedCount > 0) {
+    emitToRoom(roomId, "messages_seen", {
+      roomId,
+      messageId,
+      seenBy: {
+        userId,
+        username: req.user.username,
+        seenAt: new Date(),
+      },
+    });
+  }
 
   return successResponse({
     res,

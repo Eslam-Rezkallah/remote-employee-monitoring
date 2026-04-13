@@ -50,6 +50,27 @@ async function requireRoomAdmin(room, userId) {
     });
 }
 
+// FIX: helper to find a shared org between two users
+async function findSharedOrg(userIdA, userIdB) {
+  const orgsA = await memberModel
+    .find({ userId: userIdA, isActive: true })
+    .select("organizationId")
+    .lean();
+  const orgIdsA = new Set(orgsA.map((m) => m.organizationId.toString()));
+
+  const orgsB = await memberModel
+    .find({ userId: userIdB, isActive: true })
+    .select("organizationId")
+    .lean();
+
+  for (const m of orgsB) {
+    if (orgIdsA.has(m.organizationId.toString())) {
+      return m.organizationId;
+    }
+  }
+  return null;
+}
+
 function broadcastRoomCreated(room) {
   try {
     const chatNs = getChatNamespace();
@@ -63,6 +84,7 @@ function broadcastRoomCreated(room) {
 
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/direct
+// FIX: now verifies both users share an org and stores organizationId
 // ─────────────────────────────────────────────────────────────
 
 export const createDirect = asyncHandler(async (req, res, next) => {
@@ -78,8 +100,21 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     .select("_id username");
   if (!target) return next(new Error("Target user not found", { cause: 404 }));
 
+  // FIX: verify both users share at least one organization
+  const sharedOrgId = await findSharedOrg(senderId, targetUserId);
+  if (!sharedOrgId) {
+    return next(
+      new Error(
+        "Cannot create a DM — you don't share an organization with this user",
+        { cause: 403 },
+      ),
+    );
+  }
+
+  // check for existing DM within same org
   const existing = await chatRoomModel.findOne({
     type: chatRoomTypes.direct,
+    organizationId: sharedOrgId,
     members: { $all: [senderId, targetUserId], $size: 2 },
     isDeleted: false,
   });
@@ -93,6 +128,7 @@ export const createDirect = asyncHandler(async (req, res, next) => {
 
   const room = await chatRoomModel.create({
     type: chatRoomTypes.direct,
+    organizationId: sharedOrgId, // FIX: DMs now scoped to an org
     members: [senderId, targetUserId],
     admins: [senderId],
     createdBy: senderId,
@@ -132,7 +168,10 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     }
   }
 
-  if (teamId && !organizationId) {
+  // FIX: when teamId is provided, resolve the org from the team
+  let resolvedOrgId = organizationId || null;
+
+  if (teamId) {
     const team = await teamModel.findOne({
       _id: teamId,
       members: userId,
@@ -142,6 +181,9 @@ export const createChannel = asyncHandler(async (req, res, next) => {
       return next(
         new Error("Team not found or you are not a member", { cause: 404 }),
       );
+
+    // FIX: use the team's organizationId
+    if (!resolvedOrgId) resolvedOrgId = team.organizationId;
   }
 
   if (projectId) {
@@ -167,13 +209,15 @@ export const createChannel = asyncHandler(async (req, res, next) => {
           { cause: 403 },
         ),
       );
+
+    if (!resolvedOrgId) resolvedOrgId = project.organizationId;
   }
 
   const room = await chatRoomModel.create({
     name,
     description: description || null,
     type: chatRoomTypes.channel,
-    organizationId: organizationId || null,
+    organizationId: resolvedOrgId,
     teamId: teamId || null,
     projectId: projectId || null,
     members: [userId],
@@ -205,7 +249,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
 
   const team = await teamModel
     .findOne({ _id: teamId, members: userId, isDeleted: false })
-    .select("members name");
+    .select("members name organizationId");
   if (!team)
     return next(
       new Error("Team not found or you are not a member", { cause: 404 }),
@@ -228,6 +272,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
   room = await chatRoomModel.create({
     name: team.name ? `Team: ${team.name}` : "Team Chat",
     type: chatRoomTypes.team,
+    organizationId: team.organizationId, // FIX: use team's org
     teamId,
     members: team.members,
     admins: team.members,
@@ -250,7 +295,6 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/organization
-// FIX: was raw memberModel.find() — now properly scoped
 // ─────────────────────────────────────────────────────────────
 
 export const createOrganizationChat = asyncHandler(async (req, res, next) => {
@@ -281,7 +325,6 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
     });
   }
 
-  // FIX: was direct memberModel.find() without proper field selection
   const orgMembers = await memberModel
     .find({ organizationId, isActive: true })
     .select("userId")
@@ -313,25 +356,17 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/group
-// FIX: was raw memberModel.find() without proper validation
 // ─────────────────────────────────────────────────────────────
 
 export const createGroup = asyncHandler(async (req, res, next) => {
   const { name, description, organizationId, memberIds } = req.body;
   const userId = req.user._id;
 
-  const member = await requireOrgMember(organizationId, userId);
-  if (!["owner", "admin"].includes(member.role)) {
-    return next(
-      new Error("Only organization owner or admin can create group chats", {
-        cause: 403,
-      }),
-    );
-  }
+  // FIX: allow any org member to create group chats (not just admin/owner)
+  await requireOrgMember(organizationId, userId);
 
   const allMemberIds = [...new Set([userId.toString(), ...memberIds])];
 
-  // FIX: proper validation using .lean() for performance
   const validMembers = await memberModel
     .find({
       organizationId,
@@ -375,7 +410,7 @@ export const createGroup = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms
-// FIX: was raw .find().skip().limit() — now uses getPagination
+// FIX: organizationId is now required to prevent cross-org leakage
 // ─────────────────────────────────────────────────────────────
 
 export const listChatRooms = asyncHandler(async (req, res, next) => {
@@ -543,7 +578,6 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
 
   const isAdmin = room.admins.some((a) => a.toString() === userId.toString());
 
-  // if last admin, promote next member before leaving
   if (isAdmin && room.admins.length === 1 && room.members.length > 1) {
     const nextAdmin = room.members.find(
       (m) => m.toString() !== userId.toString(),

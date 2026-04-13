@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import organizationModel from "../../../DB/Model/organization.model.js";
 import memberModel from "../../../DB/Model/member.model.js";
 import workSessionModel from "../../../DB/Model/worksession.model.js";
@@ -19,26 +20,12 @@ const slugify = (name) =>
     .replace(/(^-|-$)/g, "");
 
 const genJoinCode = () => {
-  // avoid visually confusing characters (0/O, 1/I)
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let out = "";
   for (let i = 0; i < 8; i++)
     out += chars[Math.floor(Math.random() * chars.length)];
   return out;
 };
-
-async function ensureUniqueSlug(baseSlug, excludeOrgId = null) {
-  let slug = baseSlug;
-  let i = 1;
-  while (true) {
-    const filter = excludeOrgId
-      ? { slug, _id: { $ne: excludeOrgId }, isDeleted: false }
-      : { slug, isDeleted: false };
-    const exists = await dbService.findOne({ model: organizationModel, filter });
-    if (!exists) return slug;
-    slug = `${baseSlug}-${++i}`;
-  }
-}
 
 async function ensureUniqueJoinCode() {
   while (true) {
@@ -55,17 +42,15 @@ async function ensureUniqueJoinCode() {
 // EXPORTED HELPER — reused by member.service.js & invitation.service.js
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Verify that userId is an active member of orgId with one of the given roles.
- * Throws a descriptive error (caught by asyncHandler) if not.
- */
 export async function requireOrgRole({ orgId, userId, roles }) {
   const member = await dbService.findOne({
     model: memberModel,
     filter: { organizationId: orgId, userId, isActive: true },
   });
   if (!member)
-    throw new Error("You are not a member of this organization", { cause: 403 });
+    throw new Error("You are not a member of this organization", {
+      cause: 403,
+    });
   if (!roles.includes(member.role))
     throw new Error("Not authorized", { cause: 403 });
   return member;
@@ -73,21 +58,20 @@ export async function requireOrgRole({ orgId, userId, roles }) {
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/me
-// Returns all organizations the authenticated user belongs to.
-// Equivalent to Slack workspace list.
 // ─────────────────────────────────────────────────────────────
 
 export const getMyOrganizations = asyncHandler(async (req, res, next) => {
-  const memberships = await memberModel
-    .find({ userId: req.user._id, isActive: true })
-    .populate({
+  const memberships = await  dbService.find({
+    model: memberModel,
+    filter: { userId: req.user._id, isActive: true },
+    populate: {
       path: "organizationId",
       match: { isDeleted: false, isActive: true },
-      select: "name slug logo joinCode ownerId createdAt",
-    })
-    .lean();
+      select: "name slug logo ownerId createdAt",
+    },
+  })
+  .lean();
 
-  // filter out any deleted orgs (populate returns null for non-matching)
   const organizations = memberships
     .filter((m) => m.organizationId)
     .map((m) => ({
@@ -101,7 +85,6 @@ export const getMyOrganizations = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/:orgId
-// Returns org details, member count, and current user's role.
 // ─────────────────────────────────────────────────────────────
 
 export const getOrg = asyncHandler(async (req, res, next) => {
@@ -111,7 +94,8 @@ export const getOrg = asyncHandler(async (req, res, next) => {
     model: memberModel,
     filter: { organizationId: orgId, userId: req.user._id, isActive: true },
   });
-  if (!member) return next(new Error("Not a member of this organization", { cause: 403 }));
+  if (!member)
+    return next(new Error("Not a member of this organization", { cause: 403 }));
 
   const org = await dbService.findOne({
     model: organizationModel,
@@ -119,34 +103,61 @@ export const getOrg = asyncHandler(async (req, res, next) => {
   });
   if (!org) return next(new Error("Organization not found", { cause: 404 }));
 
-  const memberCount = await memberModel.countDocuments({
-    organizationId: orgId,
-    isActive: true,
+  const memberCount = await dbService.countDocuments({
+    model: memberModel,
+    filter: { organizationId: orgId, isActive: true },
   });
+
+  const orgData = org.toObject();
+
+  // Only owner/admin can see the joinCode
+  if (!["owner", "admin"].includes(member.role)) {
+    delete orgData.joinCode;
+  }
 
   return successResponse({
     res,
     data: {
-      ...org.toObject(),
+      ...orgData,
       memberCount,
       memberRole: member.role,
     },
   });
 });
-
 // ─────────────────────────────────────────────────────────────
 // POST /org
-// Creates a new organization and makes the creator the owner.
+// FIX: rejects duplicate name and slug instead of auto-incrementing
 // ─────────────────────────────────────────────────────────────
 
 export const createOrg = asyncHandler(async (req, res, next) => {
   const { name, slug: providedSlug, logo = null } = req.body;
 
+  // ── Check duplicate name ────────────────────────────────
+  const existingName = await dbService.findOne({
+    model: organizationModel,
+    filter: { name, isDeleted: false },
+  });
+  if (existingName) {
+    return next(new Error("Organization name already exists", { cause: 409 }));
+  }
+
+  // ── Check duplicate slug ────────────────────────────────
   const baseSlug = providedSlug ? providedSlug : slugify(name);
-  const slug = await ensureUniqueSlug(baseSlug);
+  const existingSlug = await dbService.findOne({
+    model: organizationModel,
+    filter: { slug: baseSlug, isDeleted: false },
+  });
+  if (existingSlug) {
+    return next(
+      new Error(
+        "Organization slug already taken. Choose a different name or slug.",
+        { cause: 409 },
+      ),
+    );
+  }
+
   const joinCode = await ensureUniqueJoinCode();
 
-  // logo: uploaded file takes priority, then URL from body
   const uploadedLogo = req.file
     ? `/${String(req.file.finalPath || "").replace(/\\/g, "/")}`
     : logo;
@@ -155,17 +166,15 @@ export const createOrg = asyncHandler(async (req, res, next) => {
     model: organizationModel,
     data: {
       name,
-      slug,
+      slug: baseSlug,
       logo: uploadedLogo || null,
       joinCode,
       ownerId: req.user._id,
-      members: [req.user.username],
       isActive: true,
       isDeleted: false,
     },
   });
 
-  // create owner membership record
   await dbService.create({
     model: memberModel,
     data: {
@@ -176,19 +185,26 @@ export const createOrg = asyncHandler(async (req, res, next) => {
     },
   });
 
-  return successResponse({ res, message: "Organization created", data: org }, 201);
+  return successResponse(
+    { res, message: "Organization created", data: org },
+    201,
+  );
 });
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /org/:orgId
-// Updates org name, slug, or logo. Owner/admin only.
+// FIX: rejects duplicate name and slug on update
 // ─────────────────────────────────────────────────────────────
 
 export const updateOrg = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
   const { name, slug: providedSlug, logo } = req.body;
 
-  await requireOrgRole({ orgId, userId: req.user._id, roles: ["owner", "admin"] });
+  await requireOrgRole({
+    orgId,
+    userId: req.user._id,
+    roles: ["owner", "admin"],
+  });
 
   const org = await dbService.findOne({
     model: organizationModel,
@@ -197,8 +213,22 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
   if (!org) return next(new Error("Organization not found", { cause: 404 }));
 
   const update = {};
-  if (name) update.name = name;
 
+  // ── Validate name uniqueness ────────────────────────────
+  if (name) {
+    const existingName = await dbService.findOne({
+      model: organizationModel,
+      filter: { name, _id: { $ne: orgId }, isDeleted: false },
+    });
+    if (existingName) {
+      return next(
+        new Error("Organization name already exists", { cause: 409 }),
+      );
+    }
+    update.name = name;
+  }
+
+  // ── Handle logo upload ──────────────────────────────────
   const uploadedLogo = req.file
     ? `/${String(req.file.finalPath || "").replace(/\\/g, "/")}`
     : null;
@@ -206,9 +236,21 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
   if (uploadedLogo) update.logo = uploadedLogo;
   else if (logo !== undefined) update.logo = logo;
 
+  // ── Validate slug uniqueness ────────────────────────────
   if (providedSlug || name) {
     const baseSlug = providedSlug ? providedSlug : slugify(name);
-    update.slug = await ensureUniqueSlug(baseSlug, orgId);
+    const existingSlug = await dbService.findOne({
+      model: organizationModel,
+      filter: { slug: baseSlug, _id: { $ne: orgId }, isDeleted: false },
+    });
+    if (existingSlug) {
+      return next(new Error("Slug already taken", { cause: 409 }));
+    }
+    update.slug = baseSlug;
+  }
+
+  if (Object.keys(update).length === 0) {
+    return next(new Error("No fields to update", { cause: 400 }));
   }
 
   const updated = await dbService.findOneAndUpdate({
@@ -218,12 +260,15 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
     options: { new: true },
   });
 
-  return successResponse({ res, message: "Organization updated", data: updated });
+  return successResponse({
+    res,
+    message: "Organization updated",
+    data: updated,
+  });
 });
 
 // ─────────────────────────────────────────────────────────────
 // DELETE /org/:orgId
-// Soft deletes org and deactivates all memberships. Owner only.
 // ─────────────────────────────────────────────────────────────
 
 export const deleteOrg = asyncHandler(async (req, res, next) => {
@@ -243,7 +288,6 @@ export const deleteOrg = asyncHandler(async (req, res, next) => {
     data: { isDeleted: true, isActive: false },
   });
 
-  // deactivate all memberships so members lose access immediately
   await dbService.updateMany({
     model: memberModel,
     filter: { organizationId: orgId },
@@ -255,16 +299,17 @@ export const deleteOrg = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/:orgId/work-sessions
-// Admin view of all member work sessions.
-// Combines Jira Work Log + Time Doctor concept.
 // ─────────────────────────────────────────────────────────────
 
 export const getOrgWorkSessions = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
   const { userId, status, from, to } = req.query;
 
-  // only owner/admin can see all member sessions
-  await requireOrgRole({ orgId, userId: req.user._id, roles: ["owner", "admin"] });
+  await requireOrgRole({
+    orgId,
+    userId: req.user._id,
+    roles: ["owner", "admin"],
+  });
 
   const filter = { organizationId: orgId };
   if (userId) filter.userId = userId;
@@ -296,19 +341,22 @@ export const getOrgWorkSessions = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/:orgId/work-sessions/summary
-// Aggregated productivity summary per user.
-// Shows active/idle/paused seconds and productivity %.
 // ─────────────────────────────────────────────────────────────
 
 export const getWorkSessionsSummary = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
   const { from, to } = req.query;
 
-  await requireOrgRole({ orgId, userId: req.user._id, roles: ["owner", "admin"] });
+  await requireOrgRole({
+    orgId,
+    userId: req.user._id,
+    roles: ["owner", "admin"],
+  });
 
   const matchFilter = {
-    organizationId: orgId,
-    status: "stopped", // only count completed sessions
+    // aggregation pipelines do NOT auto-cast strings to ObjectId
+    organizationId: new mongoose.Types.ObjectId(orgId),
+    status: "stopped",
   };
 
   if (from || to) {
@@ -335,9 +383,7 @@ export const getWorkSessionsSummary = asyncHandler(async (req, res, next) => {
         localField: "_id",
         foreignField: "_id",
         as: "user",
-        pipeline: [
-          { $project: { username: 1, email: 1, image: 1 } },
-        ],
+        pipeline: [{ $project: { username: 1, email: 1, image: 1 } }],
       },
     },
     { $unwind: { path: "$user", preserveNullAndEmpty: false } },
@@ -351,14 +397,10 @@ export const getWorkSessionsSummary = asyncHandler(async (req, res, next) => {
         totalIdleSeconds: 1,
         totalPausedSeconds: 1,
         avgActivePerSession: { $round: ["$avgActivePerSession", 0] },
-        // productivity % = activeSeconds / (activeSeconds + idleSeconds) * 100
         productivityPercent: {
           $cond: [
             {
-              $gt: [
-                { $add: ["$totalActiveSeconds", "$totalIdleSeconds"] },
-                0,
-              ],
+              $gt: [{ $add: ["$totalActiveSeconds", "$totalIdleSeconds"] }, 0],
             },
             {
               $round: [
@@ -367,7 +409,9 @@ export const getWorkSessionsSummary = asyncHandler(async (req, res, next) => {
                     {
                       $divide: [
                         "$totalActiveSeconds",
-                        { $add: ["$totalActiveSeconds", "$totalIdleSeconds"] },
+                        {
+                          $add: ["$totalActiveSeconds", "$totalIdleSeconds"],
+                        },
                       ],
                     },
                     100,
@@ -389,8 +433,6 @@ export const getWorkSessionsSummary = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/:orgId/chat-rooms
-// All chat rooms in this org that the user is a member of.
-// Returns rooms grouped by type (like Slack sidebar sections).
 // ─────────────────────────────────────────────────────────────
 
 export const getOrgChatRooms = asyncHandler(async (req, res, next) => {
@@ -400,7 +442,8 @@ export const getOrgChatRooms = asyncHandler(async (req, res, next) => {
     model: memberModel,
     filter: { organizationId: orgId, userId: req.user._id, isActive: true },
   });
-  if (!member) return next(new Error("Not a member of this organization", { cause: 403 }));
+  if (!member)
+    return next(new Error("Not a member of this organization", { cause: 403 }));
 
   const rooms = await dbService.find({
     model: chatRoomModel,
@@ -420,7 +463,6 @@ export const getOrgChatRooms = asyncHandler(async (req, res, next) => {
     ],
   });
 
-  // group by type — mirrors Slack sidebar sections
   const grouped = {
     organization: [],
     team: [],

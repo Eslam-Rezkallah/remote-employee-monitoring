@@ -101,7 +101,11 @@ router.delete(
   validation(validators.removeMemberParam),
   memberService.removeMember
 );
-
+router.delete(
+  "/:orgId/leave",
+  authentication(),
+  memberService.leaveOrganization,
+);
 // ─────────────────────────────────────────────────────────────
 // INVITATIONS — org-scoped
 // ─────────────────────────────────────────────────────────────

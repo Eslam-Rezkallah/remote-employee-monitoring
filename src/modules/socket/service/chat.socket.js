@@ -54,9 +54,6 @@ const EVENTS = {
 
   ROOM_CREATED: "room_created",
   MESSAGE_DELIVERY_STATUS: "message_delivery_status",
-
-  // FIX: new event — tells all user devices to refresh their unread badge
-  UNREAD_COUNT_UPDATE: "unread_count_update",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -110,7 +107,6 @@ async function isRoomMember(roomId, userId) {
 
 // ─────────────────────────────────────────────────────────────
 // BROADCAST ROOM CREATED
-// Exported so chat.service.js (REST) can call it after creating a room
 // ─────────────────────────────────────────────────────────────
 
 function broadcastRoomCreated(namespace, room) {
@@ -217,7 +213,8 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── SEND_MESSAGE ─────────────────────────────────────────
-    // FIX: now increments unreadCounts on ChatRoom for every other member
+    // FIX: removed unreadCounts map writes — unread is computed
+    //      via message aggregation in getUnreadCounts()
     socket.on(EVENTS.SEND_MESSAGE, async (payload) => {
       try {
         const {
@@ -261,30 +258,10 @@ export const registerChatSocket = (namespace) => {
           replyTo: replyTo || null,
         });
 
-        const room = await chatRoomModel
-          .findById(roomId)
-          .select("members")
-          .lean();
-
-        // update last message pointer
         await chatRoomModel.updateOne(
           { _id: roomId },
           { lastMessage: message._id, lastMessageAt: new Date() },
         );
-
-        // FIX: increment unreadCounts for every member except the sender
-        if (room?.members) {
-          const otherMembers = room.members.filter(
-            (m) => m.toString() !== userId,
-          );
-          if (otherMembers.length > 0) {
-            const inc = {};
-            otherMembers.forEach((memberId) => {
-              inc[`unreadCounts.${memberId.toString()}`] = 1;
-            });
-            await chatRoomModel.updateOne({ _id: roomId }, { $inc: inc });
-          }
-        }
 
         const populated = await messageModel
           .findById(message._id)
@@ -323,8 +300,8 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── MESSAGE_SEEN ─────────────────────────────────────────
-    // FIX: now resets unreadCounts to 0 for this user and notifies
-    //      all their devices via personal room
+    // FIX: removed unreadCounts map reset — aggregation is the
+    //      single source of truth for unread counts
     socket.on(EVENTS.MESSAGE_SEEN, async ({ roomId, messageId }) => {
       try {
         if (!roomId || !messageId) return;
@@ -347,13 +324,6 @@ export const registerChatSocket = (namespace) => {
           { $addToSet: { seenBy: { userId, seenAt: new Date() } } },
         );
 
-        // FIX: reset this user's unread count to 0
-        await chatRoomModel.updateOne(
-          { _id: roomId },
-          { $set: { [`unreadCounts.${userId}`]: 0 } },
-        );
-
-        // tell other room members about seen (for double-tick)
         socket.to(`room:${roomId}`).emit(EVENTS.MESSAGES_SEEN, {
           roomId,
           messageId,
@@ -367,11 +337,6 @@ export const registerChatSocket = (namespace) => {
           userId,
           username: user.username,
         });
-
-        // tell all of this user's devices to update their badge to 0
-        namespace
-          .to(`user_${userId}`)
-          .emit(EVENTS.UNREAD_COUNT_UPDATE, { roomId, count: 0 });
       } catch (err) {
         emitError(socket, EVENTS.MESSAGE_SEEN, err.message);
       }

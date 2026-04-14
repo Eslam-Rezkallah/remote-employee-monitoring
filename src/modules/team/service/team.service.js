@@ -148,7 +148,6 @@ export const listTeams = asyncHandler(async (req, res, next) => {
 
   const filter = { isDeleted: { $ne: true } };
 
-  // FIX: filter by org if provided
   if (organizationId) filter.organizationId = organizationId;
 
   // Non-admins only see teams they belong to
@@ -160,15 +159,16 @@ export const listTeams = asyncHandler(async (req, res, next) => {
     filter.$text = { $search: search };
   }
 
-  const teams = await dbService.find({
-    model: teamModel,
-    filter,
-    populate: teamPopulate,
-    skip,
-    limit,
-  });
-
-  const total = teams.length;
+  // FIX: use Promise.all for real total + add sort
+  const [teams, total] = await Promise.all([
+    teamModel
+      .find(filter)
+      .populate(teamPopulate)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit),
+    teamModel.countDocuments(filter),
+  ]);
 
   return successResponse({
     res,

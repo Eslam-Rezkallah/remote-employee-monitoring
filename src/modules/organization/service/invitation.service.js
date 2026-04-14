@@ -1,3 +1,11 @@
+/**
+ * organization/service/invitation.service.js
+ *
+ * Only handles: POST /org/:orgId/invitations (create/send invite)
+ *
+ * validate & accept moved to → src/modules/invite/
+ */
+
 import crypto from "node:crypto";
 import organizationModel from "../../../DB/Model/organization.model.js";
 import memberModel, { memberRoles } from "../../../DB/Model/member.model.js";
@@ -29,6 +37,9 @@ async function requireOrgRole({ orgId, userId, roles }) {
   return member;
 }
 
+// ─────────────────────────────────────────────────────────────
+// POST /org/:orgId/invitations — send email invite (owner/admin)
+// ─────────────────────────────────────────────────────────────
 export const createInvitation = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
   const { email, role = memberRoles.Member } = req.body;
@@ -47,6 +58,7 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
 
   const normalizedEmail = email.toLowerCase();
 
+  // ── Check if user is already an active member ───────────────
   const invitedUser = await dbService.findOne({
     model: userModel,
     filter: { email: normalizedEmail, isDeleted: false },
@@ -67,6 +79,29 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // ── Check if there's already a valid pending invitation ─────
+  const existingPending = await dbService.findOne({
+    model: invitationModel,
+    filter: {
+      organizationId: orgId,
+      email: normalizedEmail,
+      status: invitationStatus.Pending,
+      expiresAt: { $gt: new Date() },
+    },
+  });
+
+  if (existingPending) {
+    return next(
+      new Error(
+        "An active invitation already exists for this email. " +
+          "It expires at " +
+          existingPending.expiresAt.toISOString(),
+        { cause: 409 },
+      ),
+    );
+  }
+
+  // ── Revoke any expired/old pending invitations ──────────────
   await invitationModel.updateMany(
     {
       organizationId: orgId,
@@ -76,6 +111,7 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
     { status: invitationStatus.Revoked },
   );
 
+  // ── Create new invitation ───────────────────────────────────
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashToken(token);
   const expiresAt = new Date(
@@ -115,138 +151,6 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
       email: invitation.email,
       role: invitation.role,
       expiresAt: invitation.expiresAt,
-    },
-  });
-});
-
-export const validateInvitation = asyncHandler(async (req, res, next) => {
-  const { token } = req.query;
-  const tokenHash = hashToken(token);
-
-  const invitation = await invitationModel
-    .findOne({
-      tokenHash,
-      status: invitationStatus.Pending,
-    })
-    .populate("organizationId", "name slug logo isActive isDeleted");
-
-  if (!invitation) {
-    return next(
-      new Error("Invitation not found or already used", { cause: 404 }),
-    );
-  }
-
-  if (invitation.expiresAt < new Date()) {
-    invitation.status = invitationStatus.Expired;
-    await invitation.save();
-    return next(new Error("Invitation expired", { cause: 410 }));
-  }
-
-  if (
-    !invitation.organizationId ||
-    invitation.organizationId.isDeleted ||
-    !invitation.organizationId.isActive
-  ) {
-    return next(new Error("Organization is not available", { cause: 404 }));
-  }
-
-  return successResponse({
-    res,
-    data: {
-      email: invitation.email,
-      role: invitation.role,
-      expiresAt: invitation.expiresAt,
-      organization: invitation.organizationId,
-      status: invitation.status,
-    },
-  });
-});
-
-export const acceptInvitation = asyncHandler(async (req, res, next) => {
-  const { token } = req.body;
-  const tokenHash = hashToken(token);
-
-  const invitation = await invitationModel.findOne({
-    tokenHash,
-    status: invitationStatus.Pending,
-  });
-
-  if (!invitation) {
-    return next(
-      new Error("Invitation not found or already used", { cause: 404 }),
-    );
-  }
-
-  if (invitation.expiresAt < new Date()) {
-    invitation.status = invitationStatus.Expired;
-    await invitation.save();
-    return next(new Error("Invitation expired", { cause: 410 }));
-  }
-
-  if (req.user.email.toLowerCase() !== invitation.email) {
-    return next(
-      new Error("This invitation belongs to another email", { cause: 403 }),
-    );
-  }
-
-  const org = await dbService.findOne({
-    model: organizationModel,
-    filter: {
-      _id: invitation.organizationId,
-      isDeleted: false,
-      isActive: true,
-    },
-  });
-  if (!org) return next(new Error("Organization not found", { cause: 404 }));
-
-  let membership = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: org._id, userId: req.user._id },
-  });
-
-  if (membership?.isActive) {
-    invitation.status = invitationStatus.Accepted;
-    invitation.acceptedAt = new Date();
-    invitation.acceptedBy = req.user._id;
-    await invitation.save();
-    return successResponse({
-      res,
-      message: "User is already a member. Invitation marked as accepted",
-      data: { organizationId: org._id, role: membership.role },
-    });
-  }
-
-  if (!membership) {
-    membership = await dbService.create({
-      model: memberModel,
-      data: {
-        organizationId: org._id,
-        userId: req.user._id,
-        role: invitation.role,
-        isActive: true,
-      },
-    });
-  } else {
-    membership.role = invitation.role;
-    membership.isActive = true;
-    membership.joinedAt = new Date();
-    await membership.save();
-  }
-
-  // FIX: removed `org.members.push(req.user.username); await org.save();`
-  //      Membership is tracked via the Member collection exclusively.
-
-  invitation.status = invitationStatus.Accepted;
-  invitation.acceptedAt = new Date();
-  invitation.acceptedBy = req.user._id;
-  await invitation.save();
-
-  return successResponse({
-    res,
-    message: "Invitation accepted",
-    data: {
-      organizationId: org._id,
-      role: membership.role,
     },
   });
 });

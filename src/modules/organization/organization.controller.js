@@ -14,24 +14,7 @@ import {
 
 const router = Router();
 
-// ─────────────────────────────────────────────────────────────
-// INVITATIONS — public routes (no auth on validate)
-// ─────────────────────────────────────────────────────────────
 
-// GET /org/invitations/validate?token=  — preview invite before login
-router.get(
-  "/invitations/validate",
-  validation(validators.validateInvitation),
-  invitationService.validateInvitation
-);
-
-// POST /org/invitations/accept  — accept invite (must be logged in)
-router.post(
-  "/invitations/accept",
-  authentication(),
-  validation(validators.acceptInvitation),
-  invitationService.acceptInvitation
-);
 
 // ─────────────────────────────────────────────────────────────
 // ORG CRUD

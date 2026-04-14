@@ -14,6 +14,7 @@ import messageController from "./modules/message/message.controller.js";
 import reactionController from "./modules/reaction/reaction.controller.js";
 // NEW: call history REST routes
 import callController from "./modules/call/call.controller.js";
+import inviteController from "./modules/invite/invite.controller.js";
 
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
@@ -69,6 +70,7 @@ export const bootstrap = async (app, express) => {
   app.use("/notifications", notificationController);
   app.use("/teams", teamController);
   app.use("/work-session", workSessionController);
+  app.use("/invite", inviteController);
 
   // ── Chat ──────────────────────────────────────────────────────
   app.use("/chat/rooms", chatRoomController);

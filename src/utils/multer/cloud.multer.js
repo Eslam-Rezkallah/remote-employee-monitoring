@@ -8,8 +8,12 @@ export const fileValidations = {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ],
   video: ["video/mp4", "video/mpeg", "video/quicktime"],
-  audio: ["audio/mpeg", "audio/wav"],
+  audio: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/webm"],
 };
+
+// ✅ FIX: Increased to 10MB to match socket.io maxHttpBufferSize
+// ✅ FIX: Added audio/ogg and audio/webm for browser voice recording
+export const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 export const uploadCloudFile = (fileValidation = []) => {
   const storage = multer.diskStorage({});
@@ -31,7 +35,7 @@ export const uploadCloudFile = (fileValidation = []) => {
     storage,
     fileFilter,
     limits: {
-      fileSize: 5 * 1024 * 1024, // 5MB limit
+      fileSize: MAX_FILE_SIZE,
     },
   });
 };

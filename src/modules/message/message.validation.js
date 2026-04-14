@@ -18,6 +18,14 @@ export const sendMessage = joi
   })
   .required();
 
+// POST /chat/rooms/:roomId/messages/forward
+export const forwardMessage = joi
+  .object({
+    roomId: id.label("roomId"),
+    sourceMessageId: id.label("sourceMessageId"),
+  })
+  .required();
+
 // GET /chat/rooms/:roomId/messages
 export const listMessages = joi
   .object({
@@ -62,7 +70,7 @@ export const messageParam = joi
   })
   .required();
 
-// ✅ NEW: GET /chat/rooms/:roomId/messages/search?q=
+// GET /chat/rooms/:roomId/messages/search?q=
 export const searchMessages = joi
   .object({
     roomId: id.label("roomId"),

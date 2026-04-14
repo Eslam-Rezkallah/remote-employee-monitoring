@@ -27,7 +27,15 @@ router.post(
   messageService.sendMessage,
 );
 
-// ── ✅ NEW: Search messages in a room ─────────────────────────
+// ── ✅ NEW: Forward a message to this room ────────────────────
+// POST /chat/rooms/:roomId/messages/forward
+router.post(
+  "/forward",
+  validation(validators.forwardMessage),
+  messageService.forwardMessageHandler,
+);
+
+// ── Search messages in a room ─────────────────────────────────
 // GET /chat/rooms/:roomId/messages/search?q=hello&page=1&limit=20
 router.get(
   "/search",

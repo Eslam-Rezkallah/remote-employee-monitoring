@@ -505,3 +505,25 @@ export const getProjectMembers = asyncHandler(async (req, res, next) => {
     data: { members },
   });
 });
+export const toggleReadReceipts = asyncHandler(async (req, res, next) => {
+  const { enabled } = req.body;
+
+  const user = await dbService.findOneAndUpdate({
+    model: userModel,
+    filter: { _id: req.user._id },
+    data: { readReceipts: enabled },
+    options: { new: true },
+    select: "readReceipts",
+  });
+
+  if (!user) {
+    return next(new Error("User not found", { cause: 404 }));
+  }
+
+  return successResponse({
+    res,
+    message: `Read receipts ${enabled ? "enabled" : "disabled"}`,
+    data: { readReceipts: user.readReceipts },
+  });
+});
+ 

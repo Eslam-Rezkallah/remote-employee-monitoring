@@ -69,6 +69,10 @@ const messageSchema = new Schema(
 
     replyTo: { type: Types.ObjectId, ref: "Message", default: null },
 
+    // ✅ NEW: Message forwarding support
+    forwardedFrom: { type: Types.ObjectId, ref: "Message", default: null },
+    isForwarded: { type: Boolean, default: false },
+
     reactions: [{ type: Types.ObjectId, ref: "MessageReaction" }],
 
     deliveredTo: [deliveredToSchema],
@@ -84,16 +88,24 @@ const messageSchema = new Schema(
   { timestamps: true },
 );
 
+// ── Pre-save: auto-set isForwarded ─────────────────────────────
+messageSchema.pre("save", function (next) {
+  if (this.isNew && this.forwardedFrom) {
+    this.isForwarded = true;
+  }
+  next();
+});
+
 // ── Indexes ────────────────────────────────────────────────────
 messageSchema.index({ chatRoomId: 1, createdAt: -1 });
 messageSchema.index({ chatRoomId: 1, senderId: 1 });
 messageSchema.index({ senderId: 1, createdAt: -1 });
 messageSchema.index({ chatRoomId: 1, deletedForEveryone: 1, createdAt: -1 });
 
-// ✅ NEW: Full-text search index on message content
+// Full-text search index on message content
 messageSchema.index({ content: "text" });
 
-// ✅ NEW: Index for unread count queries
+// Index for unread count queries
 messageSchema.index({
   chatRoomId: 1,
   "seenBy.userId": 1,

@@ -35,6 +35,7 @@ router.post(
   validation(validators.shareProfile),
   userService.shareProfile,
 );
+
 // Update profile info
 router.patch(
   "/profile",
@@ -90,6 +91,14 @@ router.patch(
   authentication(),
   validation(validators.disabledTwoStepVerification),
   userService.disabledTwoStepVerification,
+);
+
+// Toggle read receipts
+router.patch(
+  "/profile/read-receipts",
+  authentication(),
+  validation(validators.toggleReadReceipts),
+  userService.toggleReadReceipts,
 );
 
 // Change user role (Admin only)

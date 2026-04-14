@@ -3,7 +3,15 @@ import path from "node:path";
 import fs from "node:fs";
 export const fileValidations = {
   image: ["image/jpeg", "image/png", "image/gif"],
-  document: ["application/pdf", "application/msword"],
+  document: [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ],
 };
 export const uploadFileDisk = (customPath = "general", fileValidation = []) => {
   const basePath = `uploads/${customPath}`;
@@ -26,7 +34,12 @@ export const uploadFileDisk = (customPath = "general", fileValidation = []) => {
     if (fileValidation.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Only JPEG and PNG files are allowed"), false);
+      cb(
+        new Error(
+          `Invalid file type. Allowed types: ${fileValidation.join(", ")}`,
+        ),
+        false,
+      );
     }
   }
   return multer({ det: "tempPath", fileFilter, storage });

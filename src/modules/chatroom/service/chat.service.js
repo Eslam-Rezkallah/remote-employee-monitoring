@@ -255,7 +255,21 @@ export const createChannel = asyncHandler(async (req, res, next) => {
 
     if (!resolvedOrgId) resolvedOrgId = project.organizationId;
   }
+   const existingChannel = await dbService.findOne({
+     model: chatRoomModel,
+     filter: {
+       name,
+       organizationId: resolvedOrgId,
+       teamId: teamId || null,
+       projectId: projectId || null,
+       type: chatRoomTypes.channel,
+       isDeleted: false,
+     },
+   });
+  if (existingChannel) {
+    return  next( new Error("A channel with the same name already exists in this scope", { cause: 409 }) );
 
+  }
   const room = await dbService.create({
     model: chatRoomModel,
     data: {

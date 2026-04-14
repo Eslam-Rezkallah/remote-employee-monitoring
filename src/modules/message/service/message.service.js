@@ -1,81 +1,35 @@
+/**
+ * modules/message/service/message.service.js
+ *
+ * ── REFACTORED ──────────────────────────────────────────────
+ * All core logic (create, edit, delete, seen, reactions) now
+ * lives in shared.message.service.js.  This file is a thin
+ * REST wrapper that calls the shared functions and emits
+ * socket events.
+ */
+
 import messageModel from "../../../DB/Model/message.model.js";
 import chatRoomModel from "../../../DB/Model/chatroom.model.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
-import { cloud } from "../../../utils/multer/cloudinary.multer.js";
-// FIX: import chat namespace so REST handlers can emit socket events
 import { getChatNamespace } from "../../socket/socket.controller.js";
 
+// ── Shared service ────────────────────────────────────────────
+import {
+  requireRoomMember,
+  uploadAttachments,
+  createMessage,
+  editMessageById,
+  deleteMessageById,
+  markMessagesSeen,
+  forwardMessage,
+} from "./shared.message.service.js";
+
 // ─────────────────────────────────────────────────────────────
-// CONSTANTS
+// SOCKET HELPER
 // ─────────────────────────────────────────────────────────────
 
-const EDIT_WINDOW_MS = 60 * 60 * 1000;
-const DELETE_WINDOW_MS = 60 * 60 * 1000;
-
-// ─────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────
-
-async function requireRoomMember(roomId, userId) {
-  const room = await chatRoomModel.findOne({
-    _id: roomId,
-    members: userId,
-    isDeleted: false,
-  });
-  if (!room)
-    throw Object.assign(new Error("Room not found or access denied"), {
-      cause: 404,
-    });
-  return room;
-}
-
-function getCloudFolder(userId, roomId) {
-  return `${process.env.APP_NAME}/chat/${roomId}/${userId}`;
-}
-
-function resolveAttachmentType(mimetype = "") {
-  if (mimetype.startsWith("image/")) return "image";
-  if (mimetype.startsWith("video/")) return "video";
-  if (mimetype.startsWith("audio/")) return "voice";
-  return "file";
-}
-
-async function uploadAttachments(files, userId, roomId) {
-  if (!files || !files.length) return [];
-
-  const folder = getCloudFolder(userId, roomId);
-  const resourceType = (mimetype) => {
-    if (mimetype.startsWith("image/")) return "image";
-    if (mimetype.startsWith("video/") || mimetype.startsWith("audio/"))
-      return "video";
-    return "raw";
-  };
-
-  return Promise.all(
-    files.map(async (file) => {
-      const result = await cloud.uploader.upload(file.path, {
-        folder,
-        resource_type: resourceType(file.mimetype),
-      });
-      return {
-        type: resolveAttachmentType(file.mimetype),
-        url: result.secure_url,
-        public_id: result.public_id,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        size: file.size,
-        duration: result.duration || null,
-      };
-    }),
-  );
-}
-
-/**
- * FIX: helper to safely emit to the chat namespace.
- * Returns silently if socket.io isn't initialized yet.
- */
 function emitToRoom(roomId, event, payload) {
   try {
     const chatNs = getChatNamespace();
@@ -89,7 +43,6 @@ function emitToRoom(roomId, event, payload) {
 
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/:roomId/messages  — Send
-// FIX: now emits receive_message via socket after saving
 // ─────────────────────────────────────────────────────────────
 
 export const sendMessage = asyncHandler(async (req, res, next) => {
@@ -99,53 +52,19 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  if (replyTo) {
-    const parent = await messageModel.findOne({
-      _id: replyTo,
-      chatRoomId: roomId,
-      deletedForEveryone: false,
-    });
-    if (!parent)
-      return next(new Error("Reply target not found", { cause: 404 }));
-  }
-
   const rawFiles = req.files?.length ? req.files : req.file ? [req.file] : [];
-
-  if (!content.trim() && !rawFiles.length) {
-    return next(
-      new Error("Message must have content or attachment", { cause: 400 }),
-    );
-  }
-
   const attachments = await uploadAttachments(rawFiles, userId, roomId);
 
-  let resolvedType = messageType;
-  if (attachments.length && messageType === "text") {
-    resolvedType =
-      attachments[0].type === "voice" ? "voice" : attachments[0].type;
-  }
-
-  const message = await messageModel.create({
-    chatRoomId: roomId,
-    senderId: userId,
-    content: content.trim(),
-    messageType: resolvedType,
+  const populated = await createMessage({
+    roomId,
+    userId,
+    content,
+    messageType,
+    replyTo,
     attachments,
-    replyTo: replyTo || null,
   });
 
-  await chatRoomModel.updateOne(
-    { _id: roomId },
-    { lastMessage: message._id, lastMessageAt: new Date() },
-  );
-
-  const populated = await messageModel
-    .findById(message._id)
-    .populate("senderId", "username email image")
-    .populate("replyTo", "content senderId messageType")
-    .lean();
-
-  // FIX: broadcast to socket so other members see the message in real-time
+  // Broadcast to socket
   emitToRoom(roomId, "receive_message", {
     message: populated,
     roomId,
@@ -153,6 +72,33 @@ export const sendMessage = asyncHandler(async (req, res, next) => {
 
   return successResponse(
     { res, data: { message: populated }, message: "Message sent" },
+    201,
+  );
+});
+
+// ─────────────────────────────────────────────────────────────
+// POST /chat/rooms/:roomId/messages/forward  — Forward
+// ─────────────────────────────────────────────────────────────
+
+export const forwardMessageHandler = asyncHandler(async (req, res, next) => {
+  const { roomId } = req.params; // target room
+  const userId = req.user._id;
+  const { sourceMessageId } = req.body;
+
+  const populated = await forwardMessage({
+    sourceMessageId,
+    targetRoomId: roomId,
+    userId,
+  });
+
+  // Broadcast to target room
+  emitToRoom(roomId, "receive_message", {
+    message: populated,
+    roomId,
+  });
+
+  return successResponse(
+    { res, data: { message: populated }, message: "Message forwarded" },
     201,
   );
 });
@@ -182,6 +128,10 @@ export const listMessages = asyncHandler(async (req, res, next) => {
       .find(filter)
       .populate("senderId", "username email image")
       .populate("replyTo", "content senderId messageType attachments")
+      .populate(
+        "forwardedFrom",
+        "content senderId messageType chatRoomId createdAt",
+      )
       .populate({
         path: "reactions",
         select: "reaction userId",
@@ -254,7 +204,6 @@ export const searchMessages = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms/unread-counts
-// Uses message aggregation (single source of truth for unread counts)
 // ─────────────────────────────────────────────────────────────
 
 export const getUnreadCounts = asyncHandler(async (req, res, next) => {
@@ -297,7 +246,6 @@ export const getUnreadCounts = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /:messageId  — Edit
-// FIX: now emits message_edited via socket
 // ─────────────────────────────────────────────────────────────
 
 export const editMessage = asyncHandler(async (req, res, next) => {
@@ -307,30 +255,13 @@ export const editMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  const message = await messageModel.findOne({
-    _id: messageId,
-    chatRoomId: roomId,
-    deletedForEveryone: false,
+  const { updated, editedAt } = await editMessageById({
+    roomId,
+    messageId,
+    userId,
+    content,
   });
-  if (!message) return next(new Error("Message not found", { cause: 404 }));
-  if (message.senderId.toString() !== userId.toString())
-    return next(new Error("Can only edit your own messages", { cause: 403 }));
 
-  const age = Date.now() - new Date(message.createdAt).getTime();
-  if (age > EDIT_WINDOW_MS)
-    return next(new Error("Edit window expired (1 hour)", { cause: 403 }));
-
-  const editedAt = new Date();
-
-  const updated = await messageModel
-    .findOneAndUpdate(
-      { _id: messageId },
-      { content: content.trim(), edited: true, editedAt },
-      { new: true },
-    )
-    .populate("senderId", "username image");
-
-  // FIX: notify room members via socket
   emitToRoom(roomId, "message_edited", {
     roomId,
     messageId,
@@ -348,7 +279,6 @@ export const editMessage = asyncHandler(async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────
 // DELETE /:messageId
-// FIX: now emits message_deleted via socket
 // ─────────────────────────────────────────────────────────────
 
 export const deleteMessage = asyncHandler(async (req, res, next) => {
@@ -358,61 +288,28 @@ export const deleteMessage = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  const message = await messageModel.findOne({
-    _id: messageId,
-    chatRoomId: roomId,
-    deletedForEveryone: false,
+  const result = await deleteMessageById({
+    roomId,
+    messageId,
+    userId,
+    deleteType,
   });
-  if (!message) return next(new Error("Message not found", { cause: 404 }));
 
-  const age = Date.now() - new Date(message.createdAt).getTime();
-
-  if (deleteType === "everyone") {
-    if (message.senderId.toString() !== userId.toString())
-      return next(
-        new Error("Can only delete your own messages for everyone", {
-          cause: 403,
-        }),
-      );
-    if (age > DELETE_WINDOW_MS)
-      return next(
-        new Error("Delete-for-everyone window expired (1 hour)", {
-          cause: 403,
-        }),
-      );
-
-    await messageModel.updateOne(
-      { _id: messageId },
-      {
-        deletedForEveryone: true,
-        deleted: true,
-        content: "",
-        attachments: [],
-      },
-    );
-
-    // FIX: notify room members via socket
+  if (result.deleteType === "everyone") {
     emitToRoom(roomId, "message_deleted", {
       roomId,
       messageId,
       deleteType: "everyone",
       deletedBy: userId,
     });
-
     return successResponse({ res, message: "Message deleted for everyone" });
   }
-
-  await messageModel.updateOne(
-    { _id: messageId },
-    { $addToSet: { deletedFor: userId } },
-  );
 
   return successResponse({ res, message: "Message deleted for you" });
 });
 
 // ─────────────────────────────────────────────────────────────
 // PATCH /:messageId/seen
-// FIX: now emits messages_seen via socket
 // ─────────────────────────────────────────────────────────────
 
 export const markSeen = asyncHandler(async (req, res, next) => {
@@ -421,23 +318,14 @@ export const markSeen = asyncHandler(async (req, res, next) => {
 
   await requireRoomMember(roomId, userId);
 
-  const pivotMsg = await messageModel
-    .findOne({ _id: messageId, chatRoomId: roomId })
-    .select("createdAt");
-  if (!pivotMsg) return next(new Error("Message not found", { cause: 404 }));
+  const { modifiedCount, broadcastSeen } = await markMessagesSeen({
+    roomId,
+    messageId,
+    userId,
+  });
 
-  const result = await messageModel.updateMany(
-    {
-      chatRoomId: roomId,
-      createdAt: { $lte: pivotMsg.createdAt },
-      "seenBy.userId": { $ne: userId },
-      senderId: { $ne: userId },
-    },
-    { $addToSet: { seenBy: { userId, seenAt: new Date() } } },
-  );
-
-  // FIX: notify room members about read receipts via socket
-  if (result.modifiedCount > 0) {
+  // Only broadcast read receipts if user has them enabled
+  if (modifiedCount > 0 && broadcastSeen) {
     emitToRoom(roomId, "messages_seen", {
       roomId,
       messageId,
@@ -452,7 +340,7 @@ export const markSeen = asyncHandler(async (req, res, next) => {
   return successResponse({
     res,
     message: "Messages marked as seen",
-    data: { updated: result.modifiedCount },
+    data: { updated: modifiedCount },
   });
 });
 

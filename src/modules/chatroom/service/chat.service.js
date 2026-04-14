@@ -9,16 +9,21 @@ import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
 import { getChatNamespace } from "../../socket/socket.controller.js";
-
+import messageModel from "../../../DB/Model/message.model.js";
+import reactionModel from "../../../DB/Model/reaction.model.js";
+import *  as dbService from "../../../DB/db.service.js"; 
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
 
 async function requireOrgMember(orgId, userId) {
-  const member = await memberModel.findOne({
-    organizationId: orgId,
-    userId,
-    isActive: true,
+  const member = await dbService.findOne({
+    model: memberModel,
+    filter: {
+      organizationId: orgId,
+      userId,
+      isActive: true,
+    },
   });
   if (!member)
     throw Object.assign(new Error("Not a member of this organization"), {
@@ -28,10 +33,13 @@ async function requireOrgMember(orgId, userId) {
 }
 
 async function requireRoomMember(roomId, userId) {
-  const room = await chatRoomModel.findOne({
-    _id: roomId,
-    members: userId,
-    isDeleted: false,
+  const room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      _id: roomId,
+      members: userId,
+      isDeleted: false,
+    },
   });
   if (!room)
     throw Object.assign(new Error("Room not found or access denied"), {
@@ -52,16 +60,24 @@ async function requireRoomAdmin(room, userId) {
 
 // FIX: helper to find a shared org between two users
 async function findSharedOrg(userIdA, userIdB) {
-  const orgsA = await memberModel
-    .find({ userId: userIdA, isActive: true })
-    .select("organizationId")
-    .lean();
+  const orgsA = await dbService.find({
+    model: memberModel,
+    filter: {
+      userId: userIdA,
+      isActive: true
+    },
+    select: "organizationId"
+  });
   const orgIdsA = new Set(orgsA.map((m) => m.organizationId.toString()));
 
-  const orgsB = await memberModel
-    .find({ userId: userIdB, isActive: true })
-    .select("organizationId")
-    .lean();
+  const orgsB = await dbService.find({
+    model: memberModel,
+    filter: {
+      userId: userIdB,
+      isActive: true
+    },
+    select: "organizationId"
+  });
 
   for (const m of orgsB) {
     if (orgIdsA.has(m.organizationId.toString())) {
@@ -95,9 +111,14 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     return next(new Error("Cannot create a DM with yourself", { cause: 400 }));
   }
 
-  const target = await userModel
-    .findOne({ _id: targetUserId, isDeleted: false })
-    .select("_id username");
+  const target = await dbService.findOne({
+    model: userModel,
+    filter: {
+      _id: targetUserId,
+      isDeleted: false
+    },
+    select: "_id username"
+  });
   if (!target) return next(new Error("Target user not found", { cause: 404 }));
 
   // FIX: verify both users share at least one organization
@@ -112,11 +133,14 @@ export const createDirect = asyncHandler(async (req, res, next) => {
   }
 
   // check for existing DM within same org
-  const existing = await chatRoomModel.findOne({
-    type: chatRoomTypes.direct,
-    organizationId: sharedOrgId,
-    members: { $all: [senderId, targetUserId], $size: 2 },
-    isDeleted: false,
+  const existing = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      type: chatRoomTypes.direct,
+      organizationId: sharedOrgId,
+      members: { $all: [senderId, targetUserId], $size: 2 },
+      isDeleted: false,
+    },
   });
   if (existing) {
     return successResponse({
@@ -126,19 +150,27 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     });
   }
 
-  const room = await chatRoomModel.create({
-    type: chatRoomTypes.direct,
-    organizationId: sharedOrgId, // FIX: DMs now scoped to an org
-    members: [senderId, targetUserId],
-    admins: [senderId],
-    createdBy: senderId,
-    isPrivate: true,
+  const room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      type: chatRoomTypes.direct,
+      organizationId: sharedOrgId, // FIX: DMs now scoped to an org
+      members: [senderId, targetUserId],
+      admins: [senderId],
+      createdBy: senderId,
+      isPrivate: true,
+    }
   });
 
-  const populated = await chatRoomModel
-    .findById(room._id)
-    .populate("members", "username email image")
-    .lean();
+  const populated = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: room._id },
+    populate: {
+      path: "members",
+      select: "username email image"
+    },
+    lean: true
+  });
 
   broadcastRoomCreated(populated);
 
@@ -172,10 +204,13 @@ export const createChannel = asyncHandler(async (req, res, next) => {
   let resolvedOrgId = organizationId || null;
 
   if (teamId) {
-    const team = await teamModel.findOne({
-      _id: teamId,
-      members: userId,
-      isDeleted: false,
+    const team = await dbService.findOne({
+      model: teamModel,
+      filter: {
+        _id: teamId,
+        members: userId,
+        isDeleted: false,
+      }
     });
     if (!team)
       return next(
@@ -187,18 +222,26 @@ export const createChannel = asyncHandler(async (req, res, next) => {
   }
 
   if (projectId) {
-    const project = await projectModel
-      .findOne({ _id: projectId, isDeleted: false })
-      .select("manager organizationId");
+    const project = await dbService.findOne({
+      model: projectModel,
+      filter: {
+        _id: projectId,
+        isDeleted: false
+      },
+      select: "manager organizationId"
+    });
     if (!project) return next(new Error("Project not found", { cause: 404 }));
 
     const isProjectManager = project.manager.toString() === userId.toString();
     let isOrgAdmin = false;
     if (project.organizationId) {
-      const mem = await memberModel.findOne({
-        organizationId: project.organizationId,
-        userId,
-        isActive: true,
+      const mem = await dbService.findOne({
+        model: memberModel,
+        filter: {
+          organizationId: project.organizationId,
+          userId,
+          isActive: true,
+        }
       });
       isOrgAdmin = mem && ["owner", "admin"].includes(mem.role);
     }
@@ -213,23 +256,31 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     if (!resolvedOrgId) resolvedOrgId = project.organizationId;
   }
 
-  const room = await chatRoomModel.create({
-    name,
-    description: description || null,
-    type: chatRoomTypes.channel,
-    organizationId: resolvedOrgId,
-    teamId: teamId || null,
-    projectId: projectId || null,
-    members: [userId],
-    admins: [userId],
-    createdBy: userId,
-    isPrivate: isPrivate ?? false,
+  const room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name,
+      description: description || null,
+      type: chatRoomTypes.channel,
+      organizationId: resolvedOrgId,
+      teamId: teamId || null,
+      projectId: projectId || null,
+      members: [userId],
+      admins: [userId],
+      createdBy: userId,
+      isPrivate: isPrivate ?? false,
+    }
   });
 
-  const populated = await chatRoomModel
-    .findById(room._id)
-    .populate("members", "username email image")
-    .lean();
+  const populated = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: room._id },
+    populate: {
+      path: "members",
+      select: "username email image"
+    },
+    lean: true
+  });
 
   broadcastRoomCreated(populated);
 
@@ -247,18 +298,27 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
   const { teamId } = req.body;
   const userId = req.user._id;
 
-  const team = await teamModel
-    .findOne({ _id: teamId, members: userId, isDeleted: false })
-    .select("members name organizationId");
+  const team = await dbService.findOne({
+    model: teamModel,
+    filter: {
+      _id: teamId,
+      members: userId,
+      isDeleted: false
+    },
+    select: "members name organizationId"
+  });
   if (!team)
     return next(
       new Error("Team not found or you are not a member", { cause: 404 }),
     );
 
-  let room = await chatRoomModel.findOne({
-    type: chatRoomTypes.team,
-    teamId,
-    isDeleted: false,
+  let room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      type: chatRoomTypes.team,
+      teamId,
+      isDeleted: false,
+    }
   });
 
   if (room) {
@@ -269,21 +329,29 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
     });
   }
 
-  room = await chatRoomModel.create({
-    name: team.name ? `Team: ${team.name}` : "Team Chat",
-    type: chatRoomTypes.team,
-    organizationId: team.organizationId, // FIX: use team's org
-    teamId,
-    members: team.members,
-    admins: team.members,
-    createdBy: userId,
-    isPrivate: false,
+  room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name: team.name ? `Team: ${team.name}` : "Team Chat",
+      type: chatRoomTypes.team,
+      organizationId: team.organizationId, // FIX: use team's org
+      teamId,
+      members: team.members,
+      admins: team.members,
+      createdBy: userId,
+      isPrivate: false,
+    }
   });
 
-  const populated = await chatRoomModel
-    .findById(room._id)
-    .populate("members", "username email image")
-    .lean();
+  const populated = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: room._id },
+    populate: {
+      path: "members",
+      select: "username email image"
+    },
+    lean: true
+  });
 
   broadcastRoomCreated(populated);
 
@@ -311,10 +379,13 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
     );
   }
 
-  let room = await chatRoomModel.findOne({
-    type: chatRoomTypes.organization,
-    organizationId,
-    isDeleted: false,
+  let room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      type: chatRoomTypes.organization,
+      organizationId,
+      isDeleted: false,
+    }
   });
 
   if (room) {
@@ -325,26 +396,35 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
     });
   }
 
-  const orgMembers = await memberModel
-    .find({ organizationId, isActive: true })
-    .select("userId")
-    .lean();
+  const orgMembers = await dbService.find({
+    model: memberModel,
+    filter: { organizationId, isActive: true },
+    select: "userId"
+  });
   const memberIds = orgMembers.map((m) => m.userId);
 
-  room = await chatRoomModel.create({
-    name: "Organization Chat",
-    type: chatRoomTypes.organization,
-    organizationId,
-    members: memberIds,
-    admins: memberIds,
-    createdBy: userId,
-    isPrivate: false,
+  room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name: "Organization Chat",
+      type: chatRoomTypes.organization,
+      organizationId,
+      members: memberIds,
+      admins: memberIds,
+      createdBy: userId,
+      isPrivate: false,
+    }
   });
 
-  const populated = await chatRoomModel
-    .findById(room._id)
-    .populate("members", "username email image")
-    .lean();
+  const populated = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: room._id },
+    populate: {
+      path: "members",
+      select: "username email image"
+    },
+    lean: true
+  });
 
   broadcastRoomCreated(populated);
 
@@ -367,14 +447,16 @@ export const createGroup = asyncHandler(async (req, res, next) => {
 
   const allMemberIds = [...new Set([userId.toString(), ...memberIds])];
 
-  const validMembers = await memberModel
-    .find({
+  const validMembers = await dbService.find({
+    model: memberModel,
+    filter: {
       organizationId,
       userId: { $in: allMemberIds },
       isActive: true,
-    })
-    .select("userId")
-    .lean();
+    },
+    select: "userId",
+    lean: true  
+  });
 
   if (validMembers.length !== allMemberIds.length) {
     return next(
@@ -384,21 +466,29 @@ export const createGroup = asyncHandler(async (req, res, next) => {
     );
   }
 
-  const room = await chatRoomModel.create({
-    name,
-    description: description || null,
-    type: chatRoomTypes.group,
-    organizationId,
-    members: allMemberIds,
-    admins: [userId],
-    createdBy: userId,
-    isPrivate: true,
+  const room = await dbService.create({
+    model: chatRoomModel,
+    data: {
+      name,
+      description: description || null,
+      type: chatRoomTypes.group,
+      organizationId,
+      members: allMemberIds,
+      admins: [userId],
+      createdBy: userId,
+      isPrivate: true,
+    }
   });
 
-  const populated = await chatRoomModel
-    .findById(room._id)
-    .populate("members", "username email image")
-    .lean();
+  const populated = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: room._id },
+    populate: {
+      path: "members",
+      select: "username email image"
+    },
+    lean: true
+  });
 
   broadcastRoomCreated(populated);
 
@@ -408,21 +498,19 @@ export const createGroup = asyncHandler(async (req, res, next) => {
   );
 });
 
+// GET /chat/rooms  — UPDATED: embeds unread counts per room
 // ─────────────────────────────────────────────────────────────
-// GET /chat/rooms
-// FIX: organizationId is now required to prevent cross-org leakage
-// ─────────────────────────────────────────────────────────────
-
+ 
 export const listChatRooms = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
   const { organizationId, type } = req.query;
-
+ 
   const { page, limit, skip } = getPagination(req.query);
-
+ 
   const filter = { members: userId, isDeleted: false };
   if (organizationId) filter.organizationId = organizationId;
   if (type) filter.type = type;
-
+ 
   const [rooms, total] = await Promise.all([
     chatRoomModel
       .find(filter)
@@ -439,10 +527,43 @@ export const listChatRooms = asyncHandler(async (req, res, next) => {
       .lean(),
     chatRoomModel.countDocuments(filter),
   ]);
-
+ 
+  // ── Compute unread counts for all returned rooms in one query ──
+  const roomIds = rooms.map((r) => r._id);
+ 
+  const unreadAgg = await messageModel.aggregate([
+    {
+      $match: {
+        chatRoomId: { $in: roomIds },
+        deletedForEveryone: false,
+        deletedFor: { $ne: userId },
+        senderId: { $ne: userId },
+        "seenBy.userId": { $ne: userId },
+      },
+    },
+    {
+      $group: {
+        _id: "$chatRoomId",
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+ 
+  const unreadMap = new Map(
+    unreadAgg.map((item) => [item._id.toString(), item.count]),
+  );
+ 
+  // ── Embed unreadCount into each room object ──
+  const roomsWithUnread = rooms.map((room) => ({
+    ...room,
+    unreadCount: unreadMap.get(room._id.toString()) || 0,
+  }));
+ 
+  const totalUnread = unreadAgg.reduce((sum, item) => sum + item.count, 0);
+ 
   return successResponse({
     res,
-    data: { rooms, total, page, limit },
+    data: { rooms: roomsWithUnread, total, totalUnread, page, limit },
   });
 });
 
@@ -462,7 +583,7 @@ export const getChatRoom = asyncHandler(async (req, res, next) => {
     .populate({
       path: "lastMessage",
       select: "content messageType senderId createdAt",
-      populate: { path: "senderId", select: "username image" },
+      populate: { path: "senderId", select: "username image" }, // ✅ nested inside lastMessage
     });
 
   if (!room)
@@ -470,7 +591,6 @@ export const getChatRoom = asyncHandler(async (req, res, next) => {
 
   return successResponse({ res, data: { room } });
 });
-
 // ─────────────────────────────────────────────────────────────
 // PATCH /chat/rooms/:roomId
 // ─────────────────────────────────────────────────────────────
@@ -494,11 +614,12 @@ export const updateRoom = asyncHandler(async (req, res, next) => {
   if (description !== undefined) update.description = description;
   if (isPrivate !== undefined) update.isPrivate = isPrivate;
 
-  const updated = await chatRoomModel.findOneAndUpdate(
-    { _id: roomId },
-    update,
-    { new: true },
-  );
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data:update,
+    options: { new: true },
+});
 
   return successResponse({
     res,
@@ -515,9 +636,9 @@ export const joinChannel = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
 
-  const room = await chatRoomModel.findOne({
-    _id: roomId,
-    isDeleted: false,
+  const room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: roomId, isDeleted: false },
   });
   if (!room) return next(new Error("Room not found", { cause: 404 }));
 
@@ -549,11 +670,12 @@ export const joinChannel = asyncHandler(async (req, res, next) => {
     await requireOrgMember(room.organizationId, userId);
   }
 
-  const updated = await chatRoomModel.findOneAndUpdate(
-    { _id: roomId },
-    { $addToSet: { members: userId } },
-    { new: true },
-  );
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $addToSet: { members: userId } },
+    options: { new: true },
+  });
 
   return successResponse({
     res,
@@ -583,18 +705,20 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
       (m) => m.toString() !== userId.toString(),
     );
     if (nextAdmin) {
-      await chatRoomModel.findOneAndUpdate(
-        { _id: roomId },
-        { $addToSet: { admins: nextAdmin } },
-      );
+      await dbService.findOneAndUpdate({
+        model: chatRoomModel,
+        filter: { _id: roomId },
+        data: { $addToSet: { admins: nextAdmin } },
+      });
     }
   }
 
-  await chatRoomModel.findOneAndUpdate(
-    { _id: roomId },
-    { $pull: { members: userId, admins: userId } },
-    { new: true },
-  );
+  await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $pull: { members: userId, admins: userId } },
+    options: { new: true },
+  });
 
   return successResponse({ res, message: "Left room successfully" });
 });
@@ -616,9 +740,9 @@ export const addMember = asyncHandler(async (req, res, next) => {
     );
   }
 
-  const newMember = await userModel.findOne({
-    _id: memberId,
-    isDeleted: false,
+  const newMember = await dbService.findOne({
+    model: userModel,
+    filter: { _id: memberId, isDeleted: false },
   });
   if (!newMember) return next(new Error("User not found", { cause: 404 }));
 
@@ -626,13 +750,15 @@ export const addMember = asyncHandler(async (req, res, next) => {
     await requireOrgMember(room.organizationId, memberId);
   }
 
-  const updated = await chatRoomModel
-    .findOneAndUpdate(
-      { _id: roomId },
-      { $addToSet: { members: memberId } },
-      { new: true },
-    )
-    .populate("members", "username email image");
+  // ✅ FIX: use dbService.findOneAndUpdate with populate param
+  //    instead of chaining .populate() on the result
+  const updated = await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $addToSet: { members: memberId } },
+    options: { new: true },
+    populate: [{ path: "members", select: "username email image" }],
+  });
 
   return successResponse({
     res,
@@ -640,7 +766,6 @@ export const addMember = asyncHandler(async (req, res, next) => {
     message: "Member added",
   });
 });
-
 // ─────────────────────────────────────────────────────────────
 // DELETE /chat/rooms/:roomId/members/:memberId
 // ─────────────────────────────────────────────────────────────
@@ -664,11 +789,12 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     );
   }
 
-  await chatRoomModel.findOneAndUpdate(
-    { _id: roomId },
-    { $pull: { members: memberId, admins: memberId } },
-    { new: true },
-  );
+  await dbService.findOneAndUpdate({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { $pull: { members: memberId, admins: memberId } },
+    options: { new: true },
+  });
 
   return successResponse({ res, message: "Member removed" });
 });
@@ -681,9 +807,9 @@ export const deleteRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
 
-  const room = await chatRoomModel.findOne({
-    _id: roomId,
-    isDeleted: false,
+  const room = await dbService.findOne({
+    model: chatRoomModel,
+    filter: { _id: roomId, isDeleted: false },
   });
   if (!room) return next(new Error("Room not found", { cause: 404 }));
 
@@ -693,10 +819,11 @@ export const deleteRoom = asyncHandler(async (req, res, next) => {
     );
   }
 
-  await chatRoomModel.updateOne(
-    { _id: roomId },
-    { isDeleted: true, deletedAt: new Date() },
-  );
+  await dbService.updateOne({
+    model: chatRoomModel,
+    filter: { _id: roomId },
+    data: { isDeleted: true, deletedAt: new Date() },
+  });
 
   return successResponse({ res, message: "Room deleted" });
 });

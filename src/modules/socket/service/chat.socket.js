@@ -1,18 +1,33 @@
+/**
+ * modules/socket/service/chat.socket.js
+ *
+ * ── REFACTORED ──────────────────────────────────────────────
+ * All message operations now delegate to shared.message.service.js
+ * so logic is never duplicated between REST and Socket paths.
+ */
+
 import mongoose from "mongoose";
 import chatRoomModel from "../../../DB/Model/chatroom.model.js";
 import messageModel from "../../../DB/Model/message.model.js";
-import reactionModel, {
-  validReactions,
-} from "../../../DB/Model/reaction.model.js";
+import { validReactions } from "../../../DB/Model/reaction.model.js";
 import { socketConnection } from "../../../DB/Model/user.model.js";
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
+
+// ── Shared service ────────────────────────────────────────────
+import {
+  requireRoomMember,
+  createMessage,
+  editMessageById,
+  deleteMessageById,
+  markMessagesSeen,
+  addReactionToMessage,
+  removeReactionFromMessage,
+  forwardMessage,
+} from "../../message/service/shared.message.service.js";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
-
-const EDIT_WINDOW_MS = 60 * 60 * 1000;
-const DELETE_WINDOW_MS = 60 * 60 * 1000;
 
 const EVENTS = {
   CONNECT: "connection",
@@ -46,6 +61,10 @@ const EVENTS = {
   DELETE_MESSAGE: "delete_message",
   MESSAGE_EDITED: "message_edited",
   MESSAGE_DELETED: "message_deleted",
+
+  // ✅ NEW
+  FORWARD_MESSAGE: "forward_message",
+  MESSAGE_FORWARDED: "message_forwarded",
 
   USER_ONLINE: "user_online",
   USER_OFFLINE: "user_offline",
@@ -213,8 +232,7 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── SEND_MESSAGE ─────────────────────────────────────────
-    // FIX: removed unreadCounts map writes — unread is computed
-    //      via message aggregation in getUnreadCounts()
+    // ✅ Now uses shared createMessage()
     socket.on(EVENTS.SEND_MESSAGE, async (payload) => {
       try {
         const {
@@ -237,37 +255,13 @@ export const registerChatSocket = (namespace) => {
         if (!isMember)
           return emitError(socket, EVENTS.SEND_MESSAGE, "Access denied", 403);
 
-        if (replyTo && mongoose.Types.ObjectId.isValid(replyTo)) {
-          const parent = await messageModel.findOne({
-            _id: replyTo,
-            chatRoomId: roomId,
-          });
-          if (!parent)
-            return emitError(
-              socket,
-              EVENTS.SEND_MESSAGE,
-              "Reply target message not found",
-            );
-        }
-
-        const message = await messageModel.create({
-          chatRoomId: roomId,
-          senderId: userId,
-          content: content.trim(),
+        const populated = await createMessage({
+          roomId,
+          userId,
+          content,
           messageType,
           replyTo: replyTo || null,
         });
-
-        await chatRoomModel.updateOne(
-          { _id: roomId },
-          { lastMessage: message._id, lastMessageAt: new Date() },
-        );
-
-        const populated = await messageModel
-          .findById(message._id)
-          .populate("senderId", "username email image")
-          .populate("replyTo", "content senderId messageType")
-          .lean();
 
         populated.deliveryStatus = "sent";
 
@@ -280,6 +274,43 @@ export const registerChatSocket = (namespace) => {
         emitError(socket, EVENTS.SEND_MESSAGE, err.message);
       }
     });
+
+    // ── FORWARD_MESSAGE ──────────────────────────────────────
+    // ✅ NEW: Forward a message to another room via socket
+    socket.on(
+      EVENTS.FORWARD_MESSAGE,
+      async ({ sourceMessageId, targetRoomId }) => {
+        try {
+          if (!sourceMessageId || !targetRoomId) {
+            return emitError(
+              socket,
+              EVENTS.FORWARD_MESSAGE,
+              "sourceMessageId and targetRoomId are required",
+            );
+          }
+
+          const populated = await forwardMessage({
+            sourceMessageId,
+            targetRoomId,
+            userId,
+          });
+
+          // Notify the target room
+          namespace.to(`room:${targetRoomId}`).emit(EVENTS.RECEIVE_MESSAGE, {
+            message: populated,
+            roomId: targetRoomId,
+          });
+
+          // Confirm to sender
+          socket.emit(EVENTS.MESSAGE_FORWARDED, {
+            message: populated,
+            targetRoomId,
+          });
+        } catch (err) {
+          emitError(socket, EVENTS.FORWARD_MESSAGE, err.message);
+        }
+      },
+    );
 
     // ── TYPING ───────────────────────────────────────────────
     socket.on(EVENTS.TYPING, ({ roomId }) => {
@@ -300,30 +331,22 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── MESSAGE_SEEN ─────────────────────────────────────────
-    // FIX: removed unreadCounts map reset — aggregation is the
-    //      single source of truth for unread counts
-    socket.on(EVENTS.MESSAGE_SEEN, async ({ roomId, messageId }) => {
-      try {
-        if (!roomId || !messageId) return;
+    // ✅ Now uses shared markMessagesSeen()
+  socket.on(EVENTS.MESSAGE_SEEN, async ({ roomId, messageId }) => {
+    try {
+      if (!roomId || !messageId) return;
 
-        const isMember = await isRoomMember(roomId, userId);
-        if (!isMember) return;
+      const isMember = await isRoomMember(roomId, userId);
+      if (!isMember) return;
 
-        const pivotMsg = await messageModel
-          .findOne({ _id: messageId, chatRoomId: roomId })
-          .select("createdAt senderId");
-        if (!pivotMsg) return;
+      const { modifiedCount, broadcastSeen } = await markMessagesSeen({
+        roomId,
+        messageId,
+        userId,
+      });
 
-        await messageModel.updateMany(
-          {
-            chatRoomId: roomId,
-            createdAt: { $lte: pivotMsg.createdAt },
-            "seenBy.userId": { $ne: userId },
-            senderId: { $ne: userId },
-          },
-          { $addToSet: { seenBy: { userId, seenAt: new Date() } } },
-        );
-
+      // Only broadcast if user has read receipts enabled
+      if (modifiedCount > 0 && broadcastSeen) {
         socket.to(`room:${roomId}`).emit(EVENTS.MESSAGES_SEEN, {
           roomId,
           messageId,
@@ -337,59 +360,30 @@ export const registerChatSocket = (namespace) => {
           userId,
           username: user.username,
         });
-      } catch (err) {
-        emitError(socket, EVENTS.MESSAGE_SEEN, err.message);
       }
-    });
+    } catch (err) {
+      emitError(socket, EVENTS.MESSAGE_SEEN, err.message);
+    }
+  });
 
     // ── ADD_REACTION ─────────────────────────────────────────
+    // ✅ Now uses shared addReactionToMessage()
     socket.on(EVENTS.ADD_REACTION, async ({ roomId, messageId, reaction }) => {
       try {
         if (!roomId || !messageId || !reaction) return;
-        if (!validReactions.includes(reaction))
-          return emitError(
-            socket,
-            EVENTS.ADD_REACTION,
-            `Invalid reaction. Allowed: ${validReactions.join(", ")}`,
-          );
 
         const isMember = await isRoomMember(roomId, userId);
         if (!isMember)
           return emitError(socket, EVENTS.ADD_REACTION, "Access denied", 403);
 
-        const message = await messageModel.findOne({
-          _id: messageId,
-          chatRoomId: roomId,
-          deletedForEveryone: false,
+        const result = await addReactionToMessage({
+          roomId,
+          messageId,
+          userId,
+          reaction,
         });
-        if (!message)
-          return emitError(socket, EVENTS.ADD_REACTION, "Message not found");
 
-        const existing = await reactionModel.findOne({ messageId, userId });
-        let reactionDoc;
-
-        if (existing) {
-          existing.reaction = reaction;
-          await existing.save();
-          reactionDoc = existing;
-        } else {
-          reactionDoc = await reactionModel.create({
-            messageId,
-            chatRoomId: roomId,
-            userId,
-            reaction,
-          });
-          await messageModel.updateOne(
-            { _id: messageId },
-            { $addToSet: { reactions: reactionDoc._id } },
-          );
-        }
-
-        const summary = await reactionModel.aggregate([
-          { $match: { messageId: message._id } },
-          { $group: { _id: "$reaction", count: { $sum: 1 } } },
-          { $project: { reaction: "$_id", count: 1, _id: 0 } },
-        ]);
+        if (result.unchanged) return;
 
         namespace.to(`room:${roomId}`).emit(EVENTS.REACTION_ADDED, {
           roomId,
@@ -397,7 +391,7 @@ export const registerChatSocket = (namespace) => {
           reaction,
           userId,
           username: user.username,
-          summary,
+          summary: result.summary,
         });
       } catch (err) {
         emitError(socket, EVENTS.ADD_REACTION, err.message);
@@ -405,28 +399,18 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── REMOVE_REACTION ──────────────────────────────────────
+    // ✅ Now uses shared removeReactionFromMessage()
     socket.on(EVENTS.REMOVE_REACTION, async ({ roomId, messageId }) => {
       try {
         if (!roomId || !messageId) return;
         const isMember = await isRoomMember(roomId, userId);
         if (!isMember) return;
 
-        const reactionDoc = await reactionModel.findOneAndDelete({
+        const { summary } = await removeReactionFromMessage({
+          roomId,
           messageId,
           userId,
         });
-        if (!reactionDoc) return;
-
-        await messageModel.updateOne(
-          { _id: messageId },
-          { $pull: { reactions: reactionDoc._id } },
-        );
-
-        const summary = await reactionModel.aggregate([
-          { $match: { messageId: reactionDoc.messageId } },
-          { $group: { _id: "$reaction", count: { $sum: 1 } } },
-          { $project: { reaction: "$_id", count: 1, _id: 0 } },
-        ]);
 
         namespace.to(`room:${roomId}`).emit(EVENTS.REACTION_REMOVED, {
           roomId,
@@ -440,6 +424,7 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── EDIT_MESSAGE ─────────────────────────────────────────
+    // ✅ Now uses shared editMessageById()
     socket.on(EVENTS.EDIT_MESSAGE, async ({ roomId, messageId, content }) => {
       try {
         if (!roomId || !messageId || !content?.trim())
@@ -453,40 +438,18 @@ export const registerChatSocket = (namespace) => {
         if (!isMember)
           return emitError(socket, EVENTS.EDIT_MESSAGE, "Access denied", 403);
 
-        const message = await messageModel.findOne({
-          _id: messageId,
-          chatRoomId: roomId,
-          deletedForEveryone: false,
+        const { editedAt } = await editMessageById({
+          roomId,
+          messageId,
+          userId,
+          content,
         });
-        if (!message)
-          return emitError(socket, EVENTS.EDIT_MESSAGE, "Message not found");
-        if (message.senderId.toString() !== userId)
-          return emitError(
-            socket,
-            EVENTS.EDIT_MESSAGE,
-            "You can only edit your own messages",
-            403,
-          );
-
-        const age = Date.now() - new Date(message.createdAt).getTime();
-        if (age > EDIT_WINDOW_MS)
-          return emitError(
-            socket,
-            EVENTS.EDIT_MESSAGE,
-            "Edit window has expired (1 hour limit)",
-            403,
-          );
-
-        message.content = content.trim();
-        message.edited = true;
-        message.editedAt = new Date();
-        await message.save();
 
         namespace.to(`room:${roomId}`).emit(EVENTS.MESSAGE_EDITED, {
           roomId,
           messageId,
-          content: message.content,
-          editedAt: message.editedAt,
+          content: content.trim(),
+          editedAt,
           editedBy: userId,
         });
       } catch (err) {
@@ -495,6 +458,7 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── DELETE_MESSAGE ───────────────────────────────────────
+    // ✅ Now uses shared deleteMessageById()
     socket.on(
       EVENTS.DELETE_MESSAGE,
       async ({ roomId, messageId, deleteType = "me" }) => {
@@ -515,42 +479,14 @@ export const registerChatSocket = (namespace) => {
               403,
             );
 
-          const message = await messageModel.findOne({
-            _id: messageId,
-            chatRoomId: roomId,
-            deletedForEveryone: false,
+          const result = await deleteMessageById({
+            roomId,
+            messageId,
+            userId,
+            deleteType,
           });
-          if (!message)
-            return emitError(
-              socket,
-              EVENTS.DELETE_MESSAGE,
-              "Message not found",
-            );
 
-          const age = Date.now() - new Date(message.createdAt).getTime();
-
-          if (deleteType === "everyone") {
-            if (message.senderId.toString() !== userId)
-              return emitError(
-                socket,
-                EVENTS.DELETE_MESSAGE,
-                "You can only delete your own messages for everyone",
-                403,
-              );
-            if (age > DELETE_WINDOW_MS)
-              return emitError(
-                socket,
-                EVENTS.DELETE_MESSAGE,
-                "Delete-for-everyone window has expired (1 hour limit)",
-                403,
-              );
-
-            message.deletedForEveryone = true;
-            message.deleted = true;
-            message.content = "";
-            message.attachments = [];
-            await message.save();
-
+          if (result.deleteType === "everyone") {
             namespace.to(`room:${roomId}`).emit(EVENTS.MESSAGE_DELETED, {
               roomId,
               messageId,
@@ -558,10 +494,6 @@ export const registerChatSocket = (namespace) => {
               deletedBy: userId,
             });
           } else {
-            await messageModel.updateOne(
-              { _id: messageId },
-              { $addToSet: { deletedFor: userId } },
-            );
             socket.emit(EVENTS.MESSAGE_DELETED, {
               roomId,
               messageId,

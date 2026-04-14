@@ -66,11 +66,17 @@ export const disabledTwoStepVerification = joi
   })
   .required();
 
-// ✅ FIX: Added missing changeRole validator
 export const changeRole = joi
   .object()
   .keys({
     userId: generalFields.id.required(),
     role: joi.string().valid("Admin", "Manager", "Member").required(),
+  })
+  .required();
+
+export const toggleReadReceipts = joi
+  .object()
+  .keys({
+    enabled: joi.boolean().required(),
   })
   .required();

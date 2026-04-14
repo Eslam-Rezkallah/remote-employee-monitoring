@@ -28,12 +28,12 @@ const userSchema = new Schema(
       unique: true,
       lowercase: true,
     },
-   password: {
-  type: String,
-  required: function () {
-    return this.provider === providerTypes.system;
-  },
-},
+    password: {
+      type: String,
+      required: function () {
+        return this.provider === providerTypes.system;
+      },
+    },
     phone: {
       type: String,
       trim: true,
@@ -115,6 +115,11 @@ const userSchema = new Schema(
     twoStepVerificationOTPValidated: {
       type: Boolean,
       default: false,
+    },
+    // ── Chat Preferences ─────────────────────────────────────
+    readReceipts: {
+      type: Boolean,
+      default: true,
     },
 
     // Email Update

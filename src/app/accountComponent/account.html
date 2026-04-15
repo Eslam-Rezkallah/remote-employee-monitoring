@@ -1,0 +1,84 @@
+<div class="page">
+  <h1 class="page-title page-title-margin">Manage Account</h1>
+  <div class="account-stack">
+
+    <!-- Full Name -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Full Name</div>
+          <div class="card-sub">Update your display name</div>
+        </div>
+      </div>
+      <form [formGroup]="nameForm" (ngSubmit)="saveName()" class="inline-form">
+        <input class="input flex-1" type="text" formControlName="fullName" placeholder="Your full name"/>
+        <button type="submit" class="btn-primary" [disabled]="nameForm.invalid || savingName()">
+          @if (savingName()) { Saving… }
+          @else if (savedName()) { ✓ Saved }
+          @else { Save }
+        </button>
+      </form>
+      @if (nameForm.get('fullName')?.touched && nameForm.get('fullName')?.errors?.['required']) {
+        <p class="field-error mt-2">Name is required.</p>
+      }
+      @if (nameError()) {
+        <p class="field-error mt-2">{{ nameError() }}</p>
+      }
+    </div>
+
+    <!-- Email (read-only — change via security flow) -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Email Address</div>
+          <div class="card-sub">Your current login email</div>
+        </div>
+      </div>
+      <div class="inline-form">
+        <input class="input flex-1" type="email" [value]="user()?.email ?? ''" disabled/>
+        <a routerLink="/dashboard/security" class="btn-ghost">Change via Security</a>
+      </div>
+    </div>
+
+    <!-- Password -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Change Password</div>
+          <div class="card-sub">Must contain uppercase, lowercase, number, and special character</div>
+        </div>
+      </div>
+      <form [formGroup]="passwordForm" (ngSubmit)="savePassword()" class="form-stack">
+        <div class="form-field">
+          <label class="form-lbl">Current password</label>
+          <input class="input" type="password" formControlName="oldPassword" placeholder="••••••••"/>
+          @if (passwordForm.get('oldPassword')?.touched && passwordForm.get('oldPassword')?.errors?.['required']) {
+            <p class="field-error">Current password is required.</p>
+          }
+        </div>
+        <div class="form-field">
+          <label class="form-lbl">New password</label>
+          <input class="input" type="password" formControlName="newPassword" placeholder="Min. 8 chars with special char"/>
+          @if (passwordForm.get('newPassword')?.touched && passwordForm.get('newPassword')?.errors?.['pattern']) {
+            <p class="field-error">Password must have uppercase, lowercase, number, and special character (@$!%*?&).</p>
+          }
+        </div>
+        <div class="form-field">
+          <label class="form-lbl">Confirm new password</label>
+          <input class="input" type="password" formControlName="confirmPassword" placeholder="Re-enter new password"/>
+        </div>
+        @if (passError()) {
+          <p class="field-error">{{ passError() }}</p>
+        }
+        <div class="form-actions">
+          <button type="submit" class="btn-primary" [disabled]="passwordForm.invalid || savingPass()">
+            @if (savingPass()) { Updating… }
+            @else if (savedPass()) { ✓ Password updated }
+            @else { Update password }
+          </button>
+        </div>
+      </form>
+    </div>
+
+  </div>
+</div>

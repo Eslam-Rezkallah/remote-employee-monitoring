@@ -1,0 +1,87 @@
+<div class="page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Notifications</h1>
+      <p class="page-sub">
+        @if (loading()) { Loading… }
+        @else { {{ unreadCount() }} unread · {{ notifications().length }} total }
+      </p>
+    </div>
+    @if (unreadCount() > 0) {
+      <button class="btn-ghost" (click)="markAllRead()">Mark all as read</button>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="empty-state">
+      <svg class="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+      </svg>
+    </div>
+  }
+
+  @if (!loading() && notifications().length === 0) {
+    <div class="empty-state">
+      <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"/>
+      </svg>
+      <p>No notifications yet.</p>
+    </div>
+  }
+
+  @if (!loading() && notifications().length > 0) {
+    <div class="notif-feed">
+      @for (notif of notifications(); track notif._id) {
+        <div class="notif-item" [class.unread]="!notif.isRead"
+             (click)="markRead(notif._id)">
+
+          <!-- Icon based on type -->
+          <div class="notif-icon"
+               [class.ni-accent]="notif.type.includes('task')"
+               [class.ni-violet]="notif.type.includes('comment')"
+               [class.ni-green]="notif.type.includes('team') || notif.type.includes('project')"
+               [class.ni-amber]="notif.type.includes('sprint')">
+            @if (notif.type.includes('task')) {
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+              </svg>
+            } @else if (notif.type.includes('comment')) {
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z"/>
+              </svg>
+            } @else {
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"/>
+              </svg>
+            }
+          </div>
+
+          <div class="notif-info">
+            <span class="notif-title">{{ notif.title }}</span>
+            @if (notif.body) {
+              <span class="notif-body">{{ notif.body }}</span>
+            }
+            <span class="notif-sub">
+              @if (notif.triggeredBy) { {{ notif.triggeredBy.username }} · }
+              {{ timeAgo(notif.createdAt) }}
+            </span>
+          </div>
+
+          @if (!notif.isRead) {
+            <div class="notif-dot"></div>
+          }
+
+          <button class="notif-delete-btn"
+                  (click)="$event.stopPropagation(); deleteNotification(notif._id)"
+                  title="Delete">
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      }
+    </div>
+  }
+</div>

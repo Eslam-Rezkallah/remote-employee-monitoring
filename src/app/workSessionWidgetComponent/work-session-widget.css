@@ -1,0 +1,162 @@
+/* ══════════════════════════════════════════════════════
+   Work Session Widget — navbar-compact timer
+   ══════════════════════════════════════════════════════ */
+
+/* ── Start button (idle state) ──────────────────────── */
+.ws-start-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: .78rem;
+  font-weight: 500;
+  color: #fff;
+  background: #10b981;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  white-space: nowrap;
+}
+.ws-start-btn:hover { background: #059669; }
+.ws-start-btn:active { transform: scale(.97); }
+.ws-start-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ws-start-btn svg { width: 14px; height: 14px; }
+
+/* ── Active/Paused widget ───────────────────────────── */
+.ws-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  background: var(--color-background-secondary, #f9fafb);
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  border-radius: 10px;
+  transition: border-color .2s, background .2s;
+}
+.ws-widget.is-paused {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.ws-widget.is-idle {
+  border-color: #ef4444;
+}
+
+/* ── Status dot ─────────────────────────────────────── */
+.ws-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  flex-shrink: 0;
+}
+.ws-dot.dot-active {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, .2);
+  animation: ws-pulse 2s ease-in-out infinite;
+}
+.ws-dot.dot-paused {
+  background: #f59e0b;
+}
+
+@keyframes ws-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(16, 185, 129, .2); }
+  50%      { box-shadow: 0 0 0 4px rgba(16, 185, 129, .15); }
+}
+
+/* ── Timer display ──────────────────────────────────── */
+.ws-timer {
+  font-size: .82rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary, #111827);
+  min-width: 52px;
+  text-align: center;
+  letter-spacing: .02em;
+}
+
+/* ── Idle badge ─────────────────────────────────────── */
+.ws-idle-badge {
+  font-size: .62rem;
+  font-weight: 600;
+  color: #ef4444;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  padding: 1px 6px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* ── Control buttons ────────────────────────────────── */
+.ws-controls {
+  display: flex;
+  gap: 4px;
+  margin-left: 2px;
+}
+
+.ws-ctrl-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  background: var(--color-background-primary, #fff);
+  color: var(--color-text-secondary, #6b7280);
+  cursor: pointer;
+  transition: all .15s;
+}
+.ws-ctrl-btn:hover {
+  background: var(--color-background-secondary, #f3f4f6);
+  color: var(--color-text-primary, #111);
+}
+.ws-ctrl-btn:disabled {
+  opacity: .4;
+  cursor: not-allowed;
+}
+.ws-ctrl-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ws-ctrl-resume {
+  color: #10b981;
+  border-color: #10b981;
+}
+.ws-ctrl-resume:hover {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.ws-ctrl-stop {
+  color: #ef4444;
+  border-color: #fecaca;
+}
+.ws-ctrl-stop:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+/* ── Stopped confirmation ───────────────────────────── */
+.ws-stopped {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: .78rem;
+  font-weight: 500;
+  color: #10b981;
+  border-radius: 8px;
+  animation: ws-fade-in .3s ease;
+}
+.ws-stopped svg {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes ws-fade-in {
+  from { opacity: 0; transform: scale(.95); }
+  to   { opacity: 1; transform: scale(1); }
+}

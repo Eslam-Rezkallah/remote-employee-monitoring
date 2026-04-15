@@ -1,0 +1,239 @@
+/* ── FE-8.1 Report tabs ───────────────────────────────────── */
+.rpt-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 0;
+}
+.rpt-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.rpt-tab:hover { color: var(--color-text-primary); }
+.rpt-tab.active { color: var(--color-text-primary); border-bottom-color: #6366f1; }
+
+.rpt-content { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Shared panel ─────────────────────────────────────────── */
+.panel {
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 12px;
+  padding: 16px;
+}
+.panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.panel-title { font-size: 13px; font-weight: 500; color: var(--color-text-primary); margin: 0; }
+.panel-sub   { font-size: 12px; color: var(--color-text-tertiary); }
+
+/* ── FE-8.4 Sprint report ────────────────────────────────── */
+.sprint-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 768px) { .sprint-summary-grid { grid-template-columns: 1fr; } }
+
+.sprint-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.sk-item {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px; background: var(--color-background-primary);
+  border-radius: 8px; border: 1px solid var(--color-border-tertiary);
+}
+.sk-val  { font-size: 22px; font-weight: 600; color: var(--color-text-primary); }
+.sk-lbl  { font-size: 10px; color: var(--color-text-tertiary); text-align: center; margin-top: 2px; }
+.sk-green .sk-val { color: #10b981; }
+.sk-red   .sk-val { color: #ef4444; }
+.sk-amber .sk-val { color: #f59e0b; }
+
+.sprint-prog-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.sprint-prog-track {
+  flex: 1; height: 8px; background: var(--color-border-tertiary);
+  border-radius: 99px; overflow: hidden;
+}
+.sprint-prog-fill { height: 100%; background: #10b981; border-radius: 99px; transition: width 0.4s; }
+.sprint-prog-pct  { font-size: 12px; color: #10b981; font-weight: 500; }
+
+/* ── FE-8.2 Burndown / FE-8.3 Burnup line chart ─────────── */
+.line-chart-wrap { position: relative; }
+.lc-grid {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 160px; padding-bottom: 20px;
+}
+.lc-col { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+.lc-bars { width: 100%; height: 140px; position: relative; }
+.lc-ideal-dot {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #f59e0b; border: 2px solid var(--color-background-secondary);
+  z-index: 2;
+}
+.lc-actual-bar {
+  position: absolute; bottom: 0; left: 15%; right: 15%;
+  background: #6366f1; border-radius: 3px 3px 0 0; opacity: 0.7;
+}
+.lc-lbl { font-size: 9px; color: var(--color-text-tertiary); margin-top: 4px; }
+
+.lc-legend, .vel-legend, .cfd-legend, .epic-legend, .ctrl-legend, .bu-legend {
+  display: flex; gap: 16px; margin-top: 12px; flex-wrap: wrap;
+}
+.lcl-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--color-text-secondary); }
+.lcl-dot  { width: 8px; height: 8px; border-radius: 50%; }
+.lcl-ideal  { background: #f59e0b; }
+.lcl-actual { background: #6366f1; }
+
+/* FE-8.3 Burnup */
+.burnup-wrap {
+  display: flex; align-items: flex-end; gap: 6px;
+  height: 160px; padding-bottom: 20px; position: relative;
+}
+.bu-col  { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.bu-bars { width: 100%; height: 140px; position: relative; display: flex; align-items: flex-end; gap: 3px; justify-content: center; }
+.bu-scope-bar { width: 40%; background: #e2e8f030; border: 1px dashed var(--color-border-tertiary); border-radius: 3px 3px 0 0; }
+.bu-done-bar  { width: 40%; background: #6366f1; border-radius: 3px 3px 0 0; }
+.bu-lbl  { font-size: 9px; color: var(--color-text-tertiary); margin-top: 4px; }
+.bu-legend { position: static; margin-top: 8px; }
+
+/* Team breakdown */
+.team-breakdown { display: flex; flex-direction: column; gap: 10px; }
+.tb-row   { display: flex; align-items: center; gap: 10px; }
+.tb-av    { width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #fff; flex-shrink: 0; }
+.tb-name  { font-size: 12px; color: var(--color-text-primary); width: 90px; flex-shrink: 0; }
+.tb-track { flex: 1; height: 6px; background: var(--color-border-tertiary); border-radius: 99px; overflow: hidden; }
+.tb-fill  { height: 100%; border-radius: 99px; transition: width 0.4s; }
+.tb-pct   { font-size: 12px; font-weight: 500; width: 36px; text-align: right; }
+.tb-points{ font-size: 11px; color: var(--color-text-tertiary); width: 60px; text-align: right; }
+
+/* ── FE-8.5 Velocity ─────────────────────────────────────── */
+.velocity-chart {
+  display: flex; align-items: flex-end; gap: 16px;
+  height: 180px; padding-bottom: 30px;
+}
+.vel-group  { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.vel-bars   { display: flex; align-items: flex-end; gap: 3px; height: 140px; width: 100%; justify-content: center; }
+.vel-bar    { width: 30%; border-radius: 3px 3px 0 0; transition: height 0.4s; }
+.vel-committed { background: #cbd5e1; }
+.vel-completed { background: #6366f1; }
+.vel-labels { display: flex; gap: 4px; font-size: 10px; }
+.vel-val    { color: var(--color-text-tertiary); }
+.vel-done-val { color: #6366f1; font-weight: 500; }
+.vel-sprint { font-size: 10px; color: var(--color-text-tertiary); }
+.vel-avg-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid var(--color-border-tertiary);
+}
+.vel-avg-label { font-size: 12px; color: var(--color-text-secondary); white-space: nowrap; }
+.vel-avg-track { flex: 1; height: 6px; background: var(--color-border-tertiary); border-radius: 99px; overflow: hidden; }
+.vel-avg-fill  { height: 100%; background: #f59e0b; border-radius: 99px; }
+.vel-avg-val   { font-size: 12px; color: #f59e0b; font-weight: 500; white-space: nowrap; }
+
+/* ── FE-8.6 Cumulative flow ──────────────────────────────── */
+.cfd-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 200px; padding-bottom: 20px;
+}
+.cfd-col  { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.cfd-stack { display: flex; flex-direction: column-reverse; width: 100%; height: 180px; border-radius: 3px 3px 0 0; overflow: hidden; }
+.cfd-seg  { width: 100%; transition: height 0.4s; }
+.cfd-done     { background: #10b981; }
+.cfd-review   { background: #f59e0b; }
+.cfd-progress { background: #6366f1; }
+.cfd-todo     { background: #e2e8f040; border: 1px solid var(--color-border-tertiary); }
+.cfd-lbl { font-size: 9px; color: var(--color-text-tertiary); margin-top: 4px; }
+
+/* ── FE-8.7 Epic report ──────────────────────────────────── */
+.epic-list { display: flex; flex-direction: column; gap: 18px; }
+.epic-row  { display: flex; align-items: center; gap: 12px; }
+.epic-header-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.epic-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.epic-name { flex: 1; font-size: 13px; font-weight: 500; color: var(--color-text-primary); }
+.epic-pct  { font-size: 13px; font-weight: 600; }
+.epic-total{ font-size: 11px; color: var(--color-text-tertiary); }
+.epic-track { height: 10px; background: var(--color-border-tertiary); border-radius: 99px; overflow: hidden; display: flex; }
+.epic-seg  { height: 100%; transition: width 0.4s; }
+.epic-todo { background: var(--color-border-tertiary); }
+.epic-counts { display: flex; gap: 12px; margin-top: 5px; }
+.ec-done   { font-size: 11px; color: #10b981; }
+.ec-prog   { font-size: 11px; color: #6366f1; }
+.ec-todo   { font-size: 11px; color: var(--color-text-tertiary); }
+
+/* ── FE-8.8 Control chart ────────────────────────────────── */
+.ctrl-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 200px; padding-bottom: 24px;
+  position: relative;
+}
+.ctrl-ucl-line, .ctrl-avg-line {
+  position: absolute; left: 0; right: 0; height: 1px;
+  z-index: 2; pointer-events: none;
+}
+.ctrl-ucl-line { border-top: 2px dashed #ef4444; }
+.ctrl-avg-line { border-top: 1px dashed #f59e0b; }
+.ctrl-ucl-lbl { position: absolute; right: 0; top: -14px; font-size: 9px; color: #ef4444; background: var(--color-background-secondary); padding: 0 3px; }
+.ctrl-avg-lbl { position: absolute; right: 0; top: -14px; font-size: 9px; color: #f59e0b; background: var(--color-background-secondary); padding: 0 3px; }
+.ctrl-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.ctrl-bar-wrap { position: relative; width: 100%; height: 176px; display: flex; align-items: flex-end; justify-content: center; }
+.ctrl-bar { width: 70%; border-radius: 3px 3px 0 0; transition: height 0.4s; }
+.ctrl-outlier-flag { position: absolute; top: -2px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #ef4444; font-weight: 700; }
+.ctrl-lbl { font-size: 8px; color: var(--color-text-tertiary); margin-top: 2px; }
+
+/* ── FE-8.9 DevOps ───────────────────────────────────────── */
+.dora-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) { .dora-grid { grid-template-columns: repeat(2, 1fr); } }
+.dora-card {
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border-tertiary);
+  border-radius: 10px; padding: 14px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.dora-label { font-size: 11px; color: var(--color-text-tertiary); }
+.dora-val   { font-size: 20px; font-weight: 600; color: var(--color-text-primary); }
+.dora-trend { font-size: 11px; font-weight: 500; }
+
+.devops-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .devops-charts { grid-template-columns: 1fr; } }
+
+.deploy-chart {
+  display: flex; align-items: flex-end; gap: 8px;
+  height: 120px; padding-bottom: 20px;
+}
+.dep-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+.dep-bar {
+  width: 100%; background: #6366f1; border-radius: 3px 3px 0 0;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 4px; transition: height 0.4s;
+}
+.dep-val  { font-size: 10px; color: #fff; font-weight: 600; }
+.dep-lbl  { font-size: 10px; color: var(--color-text-tertiary); margin-top: 4px; }
+
+.lead-list { display: flex; flex-direction: column; gap: 10px; }
+.lead-row  { display: flex; align-items: center; gap: 10px; }
+.lead-stage{ font-size: 12px; color: var(--color-text-secondary); width: 70px; flex-shrink: 0; }
+.lead-track{ flex: 1; height: 8px; background: var(--color-border-tertiary); border-radius: 99px; overflow: hidden; }
+.lead-fill { height: 100%; background: #10b981; border-radius: 99px; transition: width 0.4s; }
+.lead-val  { font-size: 12px; color: var(--color-text-tertiary); width: 30px; text-align: right; }

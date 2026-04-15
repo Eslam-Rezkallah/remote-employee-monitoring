@@ -1,0 +1,190 @@
+<div class="page">
+  <a routerLink="/dashboard/tasks" class="back-link">
+    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
+    </svg>
+    Back to Tasks
+  </a>
+
+  @if (loading()) {
+    <div style="text-align: center; padding: 4rem 0; color: #6b7280">Loading task…</div>
+  }
+
+  @if (errorMsg()) {
+    <div class="alert-error" style="margin: 2rem 0">{{ errorMsg() }}</div>
+  }
+
+  @if (task(); as t) {
+    <div class="td-layout">
+      <!-- ── Left column ── -->
+      <div>
+
+        <!-- Task header card -->
+        <div class="card card-spacing-bottom">
+          <div class="td-badges">
+            <span class="badge" [style.background]="statusColor(t.status) + '18'" [style.color]="statusColor(t.status)">
+              {{ statusLabel(t.status) }}
+            </span>
+            <span class="badge" [style.background]="priorityColor(t.priority) + '18'" [style.color]="priorityColor(t.priority)">
+              {{ t.priority | titlecase }} Priority
+            </span>
+            <span class="td-id">#{{ t.id.slice(-6).toUpperCase() }}</span>
+          </div>
+
+          <h1 class="td-title">{{ t.title }}</h1>
+
+          @if (t.description) {
+            <p class="td-desc">{{ t.description }}</p>
+          }
+
+          <div class="td-meta-grid">
+            <div class="td-meta-item">
+              <span class="td-meta-lbl">Assignee</span>
+              <div class="meta-info-flex">
+                <div class="av av-32 av2 av-small" [style.background]="t.assigneeColor">{{ t.assigneeInitial }}</div>
+                <span class="meta-info-text">{{ t.assignee || 'Unassigned' }}</span>
+              </div>
+            </div>
+            <div class="td-meta-item">
+              <span class="td-meta-lbl">Reporter</span>
+              <span class="td-meta-val">{{ t.reporter || 'Unknown' }}</span>
+            </div>
+            @if (t.dueDate) {
+              <div class="td-meta-item">
+                <span class="td-meta-lbl">Due Date</span>
+                <span class="td-meta-val">{{ t.dueDate }}</span>
+              </div>
+            }
+            @if (t.sprint) {
+              <div class="td-meta-item">
+                <span class="td-meta-lbl">Sprint</span>
+                <span class="td-meta-val">{{ t.sprint }}</span>
+              </div>
+            }
+            <div class="td-meta-item">
+              <span class="td-meta-lbl">Type</span>
+              <span class="td-meta-val">{{ workTypeIcon(t.workType) }} {{ t.workType | titlecase }}</span>
+            </div>
+            @if (t.estimated > 0) {
+              <div class="td-meta-item">
+                <span class="td-meta-lbl">Points</span>
+                <span class="td-meta-val">{{ t.estimated }}</span>
+              </div>
+            }
+          </div>
+
+          @if (t.labels.length > 0) {
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 12px">
+              @for (label of t.labels; track label) {
+                <span style="font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--color-background-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border-tertiary)">
+                  {{ label }}
+                </span>
+              }
+            </div>
+          }
+
+          <!-- Progress bar -->
+          <div class="td-prog-section">
+            <div class="td-prog-header">
+              <span class="prog-label">Progress</span>
+              <span class="td-prog-pct">{{ t.progress }}%</span>
+            </div>
+            <div class="prog-wrap">
+              <div class="prog-bar prog-accent" [style.width]="t.progress + '%'"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Comments card -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Comments</div>
+            <span class="comment-count">{{ comments().length }} comments</span>
+          </div>
+
+          <div class="comment-thread">
+            @for (comment of comments(); track comment._id) {
+              <div class="comment-item">
+                <div class="av av-36 av1 av-flex-start">
+                  {{ comment.createdBy?.username?.charAt(0)?.toUpperCase() || '?' }}
+                </div>
+                <div class="comment-bubble">
+                  <div class="cm-meta">
+                    <span class="cm-author">{{ comment.createdBy?.username || 'Unknown' }}</span>
+                    <span class="cm-time">{{ comment.createdAt | date:'MMM d, HH:mm' }}</span>
+                    @if (comment.isEdited) {
+                      <span class="cm-time">(edited)</span>
+                    }
+                  </div>
+                  <p class="cm-text">{{ comment.content }}</p>
+
+                  <!-- Replies -->
+                  @if (comment.replies?.length > 0) {
+                    <div style="margin-top: 8px; padding-left: 12px; border-left: 2px solid var(--color-border-tertiary)">
+                      @for (reply of comment.replies; track reply._id) {
+                        <div style="margin-bottom: 8px">
+                          <span style="font-size: 12px; font-weight: 600; color: var(--color-text-primary)">
+                            {{ reply.createdBy?.username || 'Unknown' }}
+                          </span>
+                          <span style="font-size: 11px; color: var(--color-text-tertiary); margin-left: 6px">
+                            {{ reply.createdAt | date:'MMM d, HH:mm' }}
+                          </span>
+                          <p style="font-size: 13px; color: var(--color-text-secondary); margin: 2px 0 0">{{ reply.content }}</p>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (comments().length === 0) {
+              <p style="font-size: 13px; color: var(--color-text-tertiary); text-align: center; padding: 16px 0">
+                No comments yet. Be the first to comment!
+              </p>
+            }
+          </div>
+
+          <!-- Add comment -->
+          <div class="add-comment">
+            <div class="av av-36 av-you">
+              {{ (task()?.reporter || '?').charAt(0).toUpperCase() }}
+            </div>
+            <input
+              class="comment-input"
+              type="text"
+              placeholder="Add a comment..."
+              [value]="newComment()"
+              (input)="newComment.set($any($event.target).value)"
+              (keydown.enter)="sendComment()"
+            />
+            <button
+              class="btn-primary btn-send"
+              [disabled]="!newComment().trim() || sendingComment()"
+              (click)="sendComment()"
+            >
+              {{ sendingComment() ? 'Sending…' : 'Send' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Right column ── -->
+      <div>
+        <!-- Time tracking -->
+        @if (t.estimated > 0) {
+          <div class="card card-spacing-bottom">
+            <div class="card-title card-title-spacing">Time Tracking</div>
+            <div class="tt-display">
+              <span class="tt-logged">{{ t.logged }}h</span>
+              <span class="tt-of">logged of {{ t.estimated }}h estimated</span>
+            </div>
+            <div class="prog-wrap prog-spacing">
+              <div class="prog-bar prog-accent" [style.width]="(t.estimated > 0 ? t.logged / t.estimated * 100 : 0) + '%'"></div>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

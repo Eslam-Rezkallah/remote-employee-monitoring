@@ -1,0 +1,21 @@
+<!-- src/app/inviteUserComponent/invite-user.html -->
+
+<div *ngIf="isAdmin; else notAdmin" class="invite-box">
+  <h3>Invite User</h3>
+
+  <input
+    type="email"
+    [(ngModel)]="email"
+    placeholder="Enter email"
+  />
+
+  <button (click)="sendInvite()" [disabled]="loading()">
+    {{ loading() ? 'Sending...' : 'Send Invite' }}
+  </button>
+
+  <p *ngIf="message()">{{ message() }}</p>
+</div>
+
+<ng-template #notAdmin>
+  <p>You are not authorized</p>
+</ng-template>

@@ -1,0 +1,197 @@
+<div [dir]="isArabic() ? 'rtl' : 'ltr'" class="landing-root">
+
+  <!-- NAVBAR -->
+  <header class="navbar">
+    <div class="container nav-inner">
+      <a class="logo" (click)="scrollTo('hero')">
+        <div class="logo-icon">
+          <svg class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z"/>
+          </svg>
+        </div>
+        <span class="logo-text">REM</span>
+      </a>
+
+      <nav class="nav-links">
+        <button class="nav-link" (click)="scrollTo('features')">{{ isArabic() ? 'المميزات' : 'Features' }}</button>
+        <button class="nav-link" (click)="scrollTo('companies')">{{ isArabic() ? 'عملاؤنا' : 'Customers' }}</button>
+        <button class="nav-link" (click)="scrollTo('faq')">{{ isArabic() ? 'الأسئلة الشائعة' : 'FAQ' }}</button>
+      </nav>
+
+      <div class="nav-actions">
+        <button class="lang-btn" (click)="toggleLang()">{{ isArabic() ? '🇺🇸 EN' : '🇸🇦 AR' }}</button>
+        <a routerLink="/login" class="btn-ghost">{{ isArabic() ? 'تسجيل الدخول' : 'Sign in' }}</a>
+        <a routerLink="/signup" class="btn-primary">{{ isArabic() ? 'ابدأ مجاناً' : 'Start for free' }}</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section id="hero" class="hero-section">
+    <div class="hero-glow"></div>
+    <div class="container hero-inner">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        {{ isArabic() ? 'إدارة الفرق عن بُعد — مُعاد تصوّرها' : 'Remote Team Management — Reimagined' }}
+      </div>
+      <h1 class="hero-title">
+        @if (isArabic()) {
+          <span>إدارة فريقك البعيد</span><br>
+          <span class="gradient-text">بكل سهولة وكفاءة</span>
+        } @else {
+          <span>Manage Your Remote Team</span><br>
+          <span class="gradient-text">With Confidence</span>
+        }
+      </h1>
+      <p class="hero-sub">
+        {{ isArabic()
+          ? 'REM يمنحك رؤية كاملة على فريقك الموزع — الحضور، الأداء، التواصل، كل شيء في مكان واحد.'
+          : 'REM gives you full visibility into your distributed team — attendance, performance, communication, all in one place.' }}
+      </p>
+      <div class="hero-ctas">
+        <a routerLink="/signup" class="btn-primary btn-lg">{{ isArabic() ? '🚀 ابدأ مجاناً' : '🚀 Start for free' }}</a>
+        <button class="btn-outline btn-lg" (click)="scrollTo('features')">{{ isArabic() ? 'اعرف أكثر' : 'Learn more' }}</button>
+      </div>
+      <div class="stats-row">
+        <div class="stat">
+          <span class="stat-number">10k+</span>
+          <span class="stat-label">{{ isArabic() ? 'موظف نشط' : 'Active employees' }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">500+</span>
+          <span class="stat-label">{{ isArabic() ? 'شركة' : 'Companies' }}</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat">
+          <span class="stat-number">99.9%</span>
+          <span class="stat-label">{{ isArabic() ? 'وقت تشغيل' : 'Uptime' }}</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPANIES CAROUSEL -->
+  <section id="companies" class="companies-section">
+    <div class="container">
+      <p class="companies-label">
+        {{ isArabic() ? 'موثوق به من قِبَل الشركات الرائدة حول العالم' : 'Trusted by leading companies around the world' }}
+      </p>
+      <div class="carousel-wrapper">
+        <button class="carousel-arrow" (click)="prevSlide()" aria-label="Previous">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
+          </svg>
+        </button>
+        <div class="carousel-track">
+          @for (company of visibleCompanies; track company.name) {
+            <div class="company-card">
+              <span class="company-logo">{{ company.logo }}</span>
+              <span class="company-name">{{ company.name }}</span>
+            </div>
+          }
+        </div>
+        <button class="carousel-arrow" (click)="nextSlide()" aria-label="Next">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+          </svg>
+        </button>
+      </div>
+      <div class="carousel-dots">
+        @for (c of companies; track c.name; let i = $index) {
+          <button class="dot" [class.active]="i === carouselIndex" (click)="carouselIndex = i"></button>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section id="features" class="features-section">
+    <div class="container">
+      <div class="section-header">
+        <h2 class="section-title">{{ isArabic() ? 'كل ما تحتاجه لإدارة فريقك' : 'Everything you need to manage your team' }}</h2>
+        <p class="section-sub">{{ isArabic() ? 'أدوات قوية مصممة خصيصاً للفرق الموزعة' : 'Powerful tools designed specifically for distributed teams' }}</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">📍</div>
+          <h3 class="feature-title">{{ isArabic() ? 'تتبع الحضور' : 'Attendance Tracking' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'راقب ساعات العمل وسجلات الحضور بدقة كاملة وتقارير لحظية.' : 'Monitor work hours and attendance records with full accuracy and real-time reports.' }}</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3 class="feature-title">{{ isArabic() ? 'قياس الأداء' : 'Performance Metrics' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'قيّم أداء الموظفين بمؤشرات واضحة وتقييمات دورية شاملة.' : 'Evaluate employee performance with clear KPIs and comprehensive periodic reviews.' }}</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3 class="feature-title">{{ isArabic() ? 'التواصل الفوري' : 'Instant Communication' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'تواصل مع فريقك مباشرة عبر رسائل مدمجة وإشعارات ذكية.' : 'Communicate with your team directly via built-in messaging and smart notifications.' }}</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🗂️</div>
+          <h3 class="feature-title">{{ isArabic() ? 'إدارة المشاريع' : 'Project Management' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'تتبع المهام والمشاريع ووزّع العمل بكفاءة على أعضاء الفريق.' : 'Track tasks and projects and efficiently distribute work among team members.' }}</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔐</div>
+          <h3 class="feature-title">{{ isArabic() ? 'أمان متقدم' : 'Advanced Security' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'بياناتك محمية بتشفير AES-256 والامتثال الكامل لمعايير GDPR.' : 'Your data is protected with AES-256 encryption and full GDPR compliance.' }}</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3 class="feature-title">{{ isArabic() ? 'تكاملات واسعة' : 'Wide Integrations' }}</h3>
+          <p class="feature-desc">{{ isArabic() ? 'اربط REM بأدواتك المفضلة مثل Slack وJira وGoogle Workspace.' : 'Connect REM to your favourite tools like Slack, Jira, and Google Workspace.' }}</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="faq-section">
+    <div class="container faq-inner">
+      <div class="section-header">
+        <h2 class="section-title">{{ isArabic() ? 'الأسئلة الشائعة' : 'Frequently Asked Questions' }}</h2>
+        <p class="section-sub">{{ isArabic() ? 'لم تجد إجابتك؟ تواصل معنا في أي وقت' : "Can't find an answer? Reach out anytime" }}</p>
+      </div>
+      <div class="faq-list">
+        @for (faq of faqs; track faq.question; let i = $index) {
+          <div class="faq-item" [class.open]="faq.open">
+            <button class="faq-trigger" (click)="toggleFaq(i)" [attr.aria-expanded]="faq.open">
+              <span>{{ isArabic() ? faq.questionAr : faq.question }}</span>
+              <svg class="faq-chevron h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7"/>
+              </svg>
+            </button>
+            @if (faq.open) {
+              <div class="faq-body">{{ isArabic() ? faq.answerAr : faq.answer }}</div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section class="cta-section">
+    <div class="container cta-inner">
+      <h2 class="cta-title">{{ isArabic() ? 'جاهز لتحويل طريقة إدارة فريقك؟' : 'Ready to transform how you manage your team?' }}</h2>
+      <p class="cta-sub">{{ isArabic() ? 'انضم إلى أكثر من 500 شركة تثق في REM لإدارة فرقها عن بُعد.' : 'Join 500+ companies that trust REM to manage their remote teams.' }}</p>
+      <a routerLink="/signup" class="btn-primary btn-lg btn-white">{{ isArabic() ? '🚀 ابدأ مجاناً الآن' : '🚀 Start for free today' }}</a>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="footer-brand">REM © 2025</span>
+      <div class="footer-links">
+        <a href="#" class="footer-link">{{ isArabic() ? 'الشروط' : 'Terms' }}</a>
+        <a href="#" class="footer-link">{{ isArabic() ? 'الخصوصية' : 'Privacy' }}</a>
+        <a href="#" class="footer-link">{{ isArabic() ? 'تواصل معنا' : 'Contact' }}</a>
+      </div>
+    </div>
+  </footer>
+
+</div>

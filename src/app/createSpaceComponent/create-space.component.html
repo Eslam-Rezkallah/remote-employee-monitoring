@@ -1,0 +1,72 @@
+<div class="modal-backdrop" (click)="close.emit()"></div>
+<div class="modal-panel" role="dialog" aria-modal="true">
+  <div class="modal-header">
+    <h2 class="modal-title">Create a Space</h2>
+    <button class="modal-close" (click)="close.emit()">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate class="modal-body">
+    <div class="space-preview" [style.background]="selectedColor() + '18'" [style.border-color]="selectedColor() + '40'">
+      <span class="preview-icon">{{ selectedIcon() }}</span>
+      <div>
+        <p class="preview-name">{{ name.value || 'Space name' }}</p>
+        <p class="preview-key">{{ key.value || 'KEY' }}</p>
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Space name</label>
+      <input class="field-input" type="text" formControlName="name" placeholder="e.g. Engineering" (input)="onNameInput($event)"/>
+      @if (name.touched && name.errors?.['required']) {
+        <p class="field-error">Name is required.</p>
+      }
+    </div>
+    <div class="field-group">
+      <label class="field-label">Space key <span class="field-hint">(2–6 uppercase letters)</span></label>
+      <input class="field-input field-input-upper" type="text" formControlName="key" placeholder="ENG" maxlength="6"
+             (input)="key.setValue($any($event.target).value.toUpperCase())"/>
+      @if (key.touched && key.errors?.['pattern']) {
+        <p class="field-error">Use 2–6 uppercase letters or numbers only.</p>
+      }
+    </div>
+    <div class="field-group">
+      <label class="field-label">Type</label>
+      <select class="field-input" formControlName="type">
+        <option value="engineering">Engineering</option>
+        <option value="design">Design</option>
+        <option value="marketing">Marketing</option>
+        <option value="management">Management</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Icon</label>
+      <div class="icon-grid">
+        @for (icon of icons; track icon) {
+          <button type="button" class="icon-btn" [class.selected]="selectedIcon() === icon" (click)="selectIcon(icon)">{{ icon }}</button>
+        }
+      </div>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Color</label>
+      <div class="color-grid">
+        @for (color of colors; track color) {
+          <button type="button" class="color-btn" [class.selected]="selectedColor() === color"
+                  [style.background]="color" (click)="selectColor(color)">
+            @if (selectedColor() === color) {
+              <svg class="h-3 w-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/>
+              </svg>
+            }
+          </button>
+        }
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" (click)="close.emit()">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="form.invalid">Create Space</button>
+    </div>
+  </form>
+</div>

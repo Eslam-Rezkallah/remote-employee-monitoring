@@ -1,0 +1,88 @@
+:host {
+  display: contents;
+}
+
+/* ── Navbar shell ─────────────────────────────────────────── */
+.navbar {
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  transition: background .2s, border-color .2s;
+}
+
+/* ── Brand ────────────────────────────────────────────────── */
+.brand-dot {
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-soft);
+}
+.brand-name { color: var(--text); }
+
+/* ── Icon buttons ─────────────────────────────────────────── */
+.icon-btn {
+  color: var(--text-2);
+  transition: background .15s, color .15s;
+}
+.icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Notification dot ─────────────────────────────────────── */
+.notif-dot { background: var(--accent); }
+
+/* ── Divider ──────────────────────────────────────────────── */
+.divider { background: var(--border); }
+
+/* ── User button ──────────────────────────────────────────── */
+.avatar {
+  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  color: var(--bg-base);
+}
+.user-name  { color: var(--text); }
+.user-role  { color: var(--text-2); }
+
+/* ── Dropdown panel ───────────────────────────────────────── */
+.dropdown-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+.dropdown-header {
+  background: var(--bg-elevated);
+  border-bottom-color: var(--border-soft);
+}
+.dropdown-name  { color: var(--text); }
+.dropdown-email { color: var(--text-2); }
+
+.role-badge {
+  font-size: .7rem; font-weight: 700;
+  background: var(--accent-soft); color: var(--accent);
+  padding: .2rem .65rem; border-radius: 999px;
+}
+
+.dropdown-item {
+  color: var(--text-2);
+  border-radius: 8px;
+  transition: background .12s, color .12s;
+}
+.dropdown-item:hover {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.item-icon       { color: var(--text-3); }
+.item-icon-admin { color: var(--violet); }
+.item-label      { color: var(--text); }
+.item-sub        { color: var(--text-2); }
+
+.dropdown-divider { border-top: 1px solid var(--border-soft); }
+.dropdown-footer  { border-top-color: var(--border-soft); }
+
+.logout-item {
+  color: var(--text-2);
+  border-radius: 10px;
+  transition: background .12s, color .12s;
+}
+.logout-item:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}

@@ -1,0 +1,212 @@
+<div class="page">
+  <a routerLink="/dashboard/employees" class="back-link">
+    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+      <path
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"
+      />
+    </svg>
+    Back to Employees
+  </a>
+
+  @if (loading()) {
+    <div class="empty-state">
+      <svg class="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
+      </svg>
+    </div>
+  }
+
+  @if (!loading() && !employee()) {
+    <div class="empty-state">
+      <p>Employee not found.</p>
+      <a routerLink="/dashboard/employees" class="btn-primary" style="margin-top: 1rem"
+        >Back to list</a
+      >
+    </div>
+  }
+
+  @if (!loading() && employee()) {
+    <!-- Banner -->
+    <div class="profile-banner">
+      <div class="pb-left">
+        <div class="av av-64 av1">{{ getInitial(employee().username) }}</div>
+        <div>
+          <h1 class="pb-name">{{ employee().username }}</h1>
+          <span class="pb-role">{{ employee().role }}</span>
+          <div class="pb-badges">
+            <span class="badge badge-green" [class.badge-gray]="!employee().isActive">
+              {{ employee().isActive ? '● Active' : '○ Inactive' }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div class="pb-stats">
+        <div class="pbs-item">
+          <span class="pbs-val">{{ totalActiveToday }}</span>
+          <span class="pbs-lbl">Active Today</span>
+        </div>
+        <div class="pbs-item">
+          <span class="pbs-val">{{ totalIdleToday }}</span>
+          <span class="pbs-lbl">Idle Today</span>
+        </div>
+        <div class="pbs-item">
+          <span class="pbs-val">{{ sessions().length }}</span>
+          <span class="pbs-lbl">Sessions</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail-3col">
+      <!-- Work Sessions -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Recent Sessions</div></div>
+        @if (sessions().length === 0) {
+          <p style="font-size: 0.85rem; color: var(--color-text-secondary); padding: 0.5rem 0">
+            No sessions recorded.
+          </p>
+        }
+        <div class="tl">
+          @for (session of sessions(); track session._id) {
+            <div class="tl-item">
+              <span class="tl-time">{{ formatDate(session.startTime) }}</span>
+              <span
+                class="tl-dot"
+                [style.background]="
+                  session.status === 'active'
+                    ? '#10b981'
+                    : session.status === 'paused'
+                      ? '#f59e0b'
+                      : '#9ca3af'
+                "
+              ></span>
+              <div>
+                <span class="tl-title">
+                  {{
+                    session.status === 'active'
+                      ? 'Active Session'
+                      : session.status === 'paused'
+                        ? 'Paused'
+                        : 'Completed'
+                  }}
+                </span>
+                <span class="tl-sub">
+                  Active: {{ formatDuration(session.activeSeconds) }} · Idle:
+                  {{ formatDuration(session.idleSeconds) }}
+                  @if (session.taskId?.title) {
+                    · {{ session.taskId!.title }}
+                  }
+                </span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Profile Info -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Profile Information</div></div>
+        <div style="display: flex; flex-direction: column; gap: 0.55rem">
+          <div class="stat-row">
+            <span class="stat-lbl">Email</span>
+            <span class="stat-val">{{ employee().email }}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Role</span>
+            <span class="stat-val">{{ employee().role }}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Status</span>
+            <span [class]="employee().isActive ? 'stat-val-green' : 'stat-val'">
+              {{ employee().isActive ? 'Active' : 'Inactive' }}
+            </span>
+          </div>
+          @if (employee().phone) {
+            <div class="stat-row">
+              <span class="stat-lbl">Phone</span>
+              <span class="stat-val">{{ employee().phone }}</span>
+            </div>
+          }
+          @if (employee().address) {
+            <div class="stat-row">
+              <span class="stat-lbl">Address</span>
+              <span class="stat-val">{{ employee().address }}</span>
+            </div>
+          }
+          @if (employee().joinedAt) {
+            <div class="stat-row">
+              <span class="stat-lbl">Joined</span>
+              <span class="stat-val">{{ formatDate(employee().joinedAt) }}</span>
+            </div>
+          }
+        </div>
+      </div>
+
+      <!-- Monitoring + Screenshots -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Monitoring</div></div>
+        <div style="display: flex; flex-direction: column; gap: 0.35rem">
+          <div class="stat-row">
+            <span class="stat-lbl">Active Today</span>
+            <span class="stat-val-accent">{{ totalActiveToday }}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Idle Today</span>
+            <span class="stat-val-amber">{{ totalIdleToday }}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Total Sessions</span>
+            <span class="stat-val">{{ sessions().length }}</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-lbl">Screenshots Today</span>
+            <span class="stat-val">{{ screenshots().length }}</span>
+          </div>
+        </div>
+
+        <!-- Screenshots grid -->
+        @if (screenshots().length > 0) {
+          <div style="margin-top: 1rem">
+            <div class="card-title" style="font-size: 0.8rem; margin-bottom: 0.5rem">
+              Recent Screenshots
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px">
+              @for (ss of screenshots().slice(0, 4); track ss._id) {
+                <div
+                  style="
+                    border-radius: 8px;
+                    overflow: hidden;
+                    border: 1px solid var(--color-border-tertiary, #e5e7eb);
+                    position: relative;
+                  "
+                >
+                  <img
+                    [src]="ss.imageUrl"
+                    alt="Screenshot"
+                    style="width: 100%; height: 80px; object-fit: cover; display: block"
+                  />
+                  <span
+                    style="
+                      position: absolute;
+                      bottom: 4px;
+                      right: 6px;
+                      font-size: 0.6rem;
+                      background: rgba(0, 0, 0, 0.6);
+                      color: #fff;
+                      padding: 1px 5px;
+                      border-radius: 4px;
+                    "
+                  >
+                    {{ formatDate(ss.capturedAt) }}
+                  </span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

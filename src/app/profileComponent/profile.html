@@ -1,0 +1,106 @@
+<div class="page">
+  <h1 class="page-title page-title-margin">My Profile</h1>
+
+  <div class="profile-layout">
+
+    <!-- ── Side card ── -->
+    <div class="card profile-side">
+      <div class="av av-64 av1">{{ userInitial }}</div>
+      <span class="ps-name">{{ user()?.fullName }}</span>
+      <span class="ps-role">{{ getRoleLabel() }}</span>
+      <span class="badge badge-green badge-margin-top">● Online</span>
+      <div class="ps-stats">
+        <div class="ps-stat"><span class="pss-val">{{ getRoleLabel() }}</span><span class="pss-lbl">Role</span></div>
+        <div class="ps-stat"><span class="pss-val">24</span><span class="pss-lbl">Team Size</span></div>
+        <div class="ps-stat"><span class="pss-val">95%</span><span class="pss-lbl">Performance</span></div>
+      </div>
+    </div>
+
+    <!-- ── Main content ── -->
+    <div class="profile-main">
+
+      <!-- Personal Info -->
+      <div class="card card-spacing">
+        <div class="card-header">
+          <div class="card-title">Personal Information</div>
+          @if (!editing()) {
+            <button class="btn-ghost btn-ghost-small" (click)="editing.set(true)">Edit</button>
+          }
+        </div>
+
+        @if (!editing()) {
+          <!-- View mode -->
+          <div class="info-list">
+            <div class="info-row">
+              <span class="info-lbl">Full Name</span>
+              <span class="info-val">{{ user()?.fullName }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Email</span>
+              <span class="info-val">{{ user()?.email }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Role</span>
+              <span class="info-val">{{ getRoleLabel() }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-lbl">Status</span>
+              <span class="info-val">Active</span>
+            </div>
+          </div>
+        } @else {
+          <!-- Edit mode -->
+          <form [formGroup]="editForm" (ngSubmit)="saveEdit()" class="edit-form">
+            <div class="form-field">
+              <label class="form-lbl">Full Name</label>
+              <input class="input" type="text" formControlName="fullName" placeholder="Your full name"/>
+              @if (editForm.get('fullName')?.touched && editForm.get('fullName')?.errors?.['required']) {
+                <p class="field-error">Name is required.</p>
+              }
+            </div>
+            <div class="form-field">
+              <label class="form-lbl">Email</label>
+              <input class="input" type="email" formControlName="email" placeholder="your@email.com"/>
+              @if (editForm.get('email')?.touched && editForm.get('email')?.errors?.['email']) {
+                <p class="field-error">Enter a valid email.</p>
+              }
+            </div>
+            <div class="edit-actions">
+              <button type="button" class="btn-ghost" (click)="editing.set(false)">Cancel</button>
+              <button type="submit" class="btn-primary">Save changes</button>
+            </div>
+          </form>
+        }
+      </div>
+
+      <!-- Security card -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">Security</div></div>
+        <div class="sec-items">
+          <div class="sec-row">
+            <div>
+              <span class="sec-title">Password</span>
+              <span class="sec-sub">Last changed 30 days ago</span>
+            </div>
+            <a routerLink="/dashboard/security" class="btn-ghost btn-ghost-small">Change</a>
+          </div>
+          <div class="sec-row">
+            <div>
+              <span class="sec-title">Two-Step Verification</span>
+              <span class="sec-sub">JWT + TOTP enabled</span>
+            </div>
+            <span class="sec-enabled">Enabled ✓</span>
+          </div>
+          <div class="sec-row">
+            <div>
+              <span class="sec-title">Active Sessions</span>
+              <span class="sec-sub">1 device currently logged in</span>
+            </div>
+            <a routerLink="/dashboard/security" class="btn-ghost btn-ghost-small">View</a>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

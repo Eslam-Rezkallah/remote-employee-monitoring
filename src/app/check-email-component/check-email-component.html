@@ -1,0 +1,248 @@
+<div class="page-shell min-h-screen flex items-center justify-center px-4 py-12">
+  <div class="card w-full max-w-sm sm:max-w-md rounded-2xl p-8 sm:p-10 text-center">
+
+    <!-- Icon -->
+    <div class="brand-icon mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl shadow-lg">
+      <svg class="h-10 w-10 text-white" fill="none" viewBox="0 0 24 24"
+           stroke="currentColor" stroke-width="1.75">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"/>
+      </svg>
+    </div>
+
+    <h1 class="heading text-2xl sm:text-3xl font-bold tracking-tight mt-2">
+      @if (flow() === 'reset-password' && resetStep() === 'new-password') {
+        Set new password
+      } @else if (flow() === 'reset-password') {
+        Verify reset code
+      } @else {
+        Confirm your email
+      }
+    </h1>
+
+    <p class="subheading mt-3 text-sm leading-relaxed">
+      @if (flow() === 'reset-password' && resetStep() === 'new-password') {
+        Enter your new password below.
+      } @else {
+        We sent a 5-digit code to
+        @if (email()) {
+          <span class="font-semibold highlight"> {{ email() }}</span>
+        } @else {
+          <span class="font-semibold highlight"> your email</span>
+        }
+      }
+    </p>
+
+    <!-- Success message -->
+    @if (successMsg()) {
+      <div class="mt-4 rounded-xl border border-green-400 bg-green-50 px-4 py-3 flex items-center gap-2" role="alert">
+        <svg class="h-4 w-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+        </svg>
+        <p class="text-sm text-green-700 text-left">{{ successMsg() }}</p>
+      </div>
+    }
+
+    <!-- Error message -->
+    @if (serverError()) {
+      <div class="mt-4 rounded-xl border border-red-400 bg-red-50 px-4 py-3 flex items-center gap-2" role="alert">
+        <svg class="h-4 w-4 text-red-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/>
+        </svg>
+        <p class="text-sm text-red-700 text-left">{{ serverError() }}</p>
+      </div>
+    }
+
+    <!-- Ban countdown -->
+    @if (isBanned()) {
+      <div class="mt-4 rounded-xl border border-amber-400 bg-amber-50 px-4 py-3" role="alert">
+        <p class="text-sm text-amber-700 font-semibold">
+          Too many failed attempts. Try again in
+          <span class="font-bold text-amber-900">{{ banTimeFormatted }}</span>
+        </p>
+      </div>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════
+         OTP Form (for both confirm-email and reset-password step 1)
+         ═══════════════════════════════════════════════════════ -->
+    @if (!isBanned() && resetStep() === 'otp') {
+      <form [formGroup]="otpForm" (ngSubmit)="onSubmit()" novalidate class="mt-6 space-y-4">
+        <div>
+          <label for="code" class="field-label block text-sm font-medium mb-1.5 text-left">
+            Verification code
+          </label>
+          <input
+            id="code"
+            type="text"
+            formControlName="code"
+            inputmode="numeric"
+            maxlength="5"
+            placeholder="Enter 5-digit code"
+            [class.is-invalid]="code.invalid && code.touched"
+            class="field-input w-full rounded-xl py-3 px-4 text-center text-xl font-bold tracking-widest outline-none"
+            autocomplete="one-time-code"
+          />
+          @if (code.touched && code.errors) {
+            <div role="alert" class="mt-2">
+              @if (code.errors['required']) {
+                <p class="error-msg text-xs text-left">Please enter the verification code.</p>
+              }
+              @if (code.errors['pattern']) {
+                <p class="error-msg text-xs text-left">Code must be exactly 5 digits.</p>
+              }
+            </div>
+          }
+        </div>
+
+        <button type="submit"
+          [disabled]="otpForm.invalid || isSubmitting()"
+          class="submit-btn w-full rounded-xl py-2.5 text-sm font-semibold text-white
+                 transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+          @if (isSubmitting()) {
+            <span class="flex items-center justify-center gap-2">
+              <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+              </svg>
+              Verifying…
+            </span>
+          } @else {
+            {{ flow() === 'reset-password' ? 'Verify code' : 'Confirm email' }}
+          }
+        </button>
+      </form>
+    }
+
+    <!-- ═══════════════════════════════════════════════════════
+         New Password Form (reset-password step 2)
+         ═══════════════════════════════════════════════════════ -->
+    @if (flow() === 'reset-password' && resetStep() === 'new-password') {
+      <form [formGroup]="passwordForm" (ngSubmit)="onResetPassword()" novalidate class="mt-6 space-y-4">
+
+        <!-- New Password -->
+        <div>
+          <label for="password" class="field-label block text-sm font-medium mb-1.5 text-left">
+            New password
+          </label>
+          <div class="relative">
+            <input id="password"
+              [type]="showPassword() ? 'text' : 'password'"
+              formControlName="password"
+              autocomplete="new-password"
+              placeholder="Min. 8 characters"
+              [class.is-invalid]="password.invalid && password.touched"
+              class="field-input w-full rounded-xl py-2.5 pl-4 pr-11 text-sm outline-none"/>
+            <button type="button" (click)="togglePassword()"
+              class="toggle-btn absolute inset-y-0 right-3 flex items-center focus:outline-none">
+              @if (showPassword()) {
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"/>
+                </svg>
+              } @else {
+                <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
+                </svg>
+              }
+            </button>
+          </div>
+          @if (password.touched && password.errors) {
+            <div role="alert" class="mt-2">
+              @if (password.errors['required']) {
+                <p class="error-msg text-xs text-left">Password is required.</p>
+              }
+              @if (password.errors['pattern']) {
+                <p class="error-msg text-xs text-left">
+                  Must be 8+ chars with uppercase, lowercase, number, and special character.
+                </p>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Confirm Password -->
+        <div>
+          <label for="confirmPassword" class="field-label block text-sm font-medium mb-1.5 text-left">
+            Confirm new password
+          </label>
+          <input id="confirmPassword" type="password"
+            formControlName="confirmPassword"
+            autocomplete="new-password"
+            placeholder="Re-enter your password"
+            [class.is-invalid]="passwordMismatch"
+            class="field-input w-full rounded-xl py-2.5 px-4 text-sm outline-none"/>
+          @if (passwordMismatch) {
+            <p class="error-msg text-xs mt-2 text-left">Passwords do not match.</p>
+          }
+        </div>
+
+        <button type="submit"
+          [disabled]="passwordForm.invalid || passwordMismatch || isSubmitting()"
+          class="submit-btn w-full rounded-xl py-2.5 text-sm font-semibold text-white
+                 transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+          @if (isSubmitting()) {
+            <span class="flex items-center justify-center gap-2">
+              <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+              </svg>
+              Resetting password…
+            </span>
+          } @else {
+            Reset password
+          }
+        </button>
+      </form>
+    }
+
+    <!-- Hint box -->
+    @if (resetStep() === 'otp') {
+      <div class="hint-box rounded-xl px-4 py-3 mt-5 flex gap-3 items-start text-left">
+        <svg class="h-4 w-4 shrink-0 mt-0.5 hint-icon" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+            d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z"/>
+        </svg>
+        <p class="hint-text text-xs leading-relaxed">
+          Can't find it? Check your <strong>spam</strong> or <strong>junk</strong> folder.
+        </p>
+      </div>
+    }
+
+    <!-- Actions -->
+    <div class="mt-5 flex flex-col gap-3">
+      @if (!isBanned() && resetStep() === 'otp') {
+        <button type="button"
+          (click)="resendEmail()"
+          [disabled]="isResending()"
+          class="submit-btn w-full rounded-xl py-2.5 text-sm font-semibold text-white
+                 transition-all duration-200 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed">
+          @if (isResending()) {
+            <span class="flex items-center justify-center gap-2">
+              <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+              </svg>
+              Sending…
+            </span>
+          } @else {
+            Resend code
+          }
+        </button>
+      }
+
+      <a routerLink="/login"
+         class="back-link inline-flex items-center justify-center gap-1.5 text-sm font-medium
+                transition-colors duration-150 py-2">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18"/>
+        </svg>
+        Back to sign in
+      </a>
+    </div>
+
+  </div>
+</div>

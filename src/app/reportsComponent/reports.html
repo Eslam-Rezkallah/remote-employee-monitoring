@@ -1,0 +1,494 @@
+<div class="page">
+
+  <!-- ── Header ── -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Reports & Analytics</h1>
+      <p class="page-sub">
+        @if (loadingReport()) { Loading report data… }
+        @else if (sprintReport()) {
+          {{ sprintReport().sprint?.name }} · {{ sprintReport().totals?.total }} tasks
+        } @else { Select a space and sprint to load data }
+      </p>
+    </div>
+    <div class="header-actions">
+      <select class="filter-select" aria-label="Space"
+              [value]="selectedSpaceId()"
+              (change)="onSpaceChange($any($event.target).value)">
+        <option value="">Select space…</option>
+        @for (space of spaces(); track space.id) {
+          <option [value]="space.id">{{ space.icon }} {{ space.name }}</option>
+        }
+      </select>
+      <select class="filter-select" aria-label="Sprint"
+              [value]="selectedSprintId()"
+              (change)="onSprintChange($any($event.target).value)"
+              [disabled]="loadingSprints() || sprints().length === 0">
+        @if (loadingSprints()) { <option>Loading…</option> }
+        @else if (sprints().length === 0) { <option>No sprints</option> }
+        @else {
+          @for (sprint of sprints(); track sprint._id) {
+            <option [value]="sprint._id">{{ sprint.name }}</option>
+          }
+        }
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Tabs ── -->
+  <div class="rpt-tabs">
+    @for (tab of tabs; track tab.id) {
+      <button class="rpt-tab" [class.active]="activeTab() === tab.id" (click)="activeTab.set(tab.id)">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.75">
+          <path stroke-linecap="round" stroke-linejoin="round" [attr.d]="tab.icon"/>
+        </svg>
+        {{ tab.label }}
+      </button>
+    }
+  </div>
+
+  <!-- Loading -->
+  @if (loadingReport()) {
+    <div class="empty-state">
+      <svg class="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+      </svg>
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       OVERVIEW
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'overview') {
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-icon ki-accent">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Total Tasks</span>
+          <span class="kpi-val">{{ sprintReport()?.totals?.total ?? '—' }}</span>
+          <span class="kpi-delta delta-up">Sprint scope</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-green">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Tasks Done</span>
+          <span class="kpi-val">{{ sprintReport()?.totals?.done ?? '—' }}</span>
+          <span class="kpi-delta delta-up">{{ sprintCompletionPct }}% complete</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-violet">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Avg Velocity</span>
+          <span class="kpi-val">{{ avgVelocity() }}</span>
+          <span class="kpi-delta delta-up">pts/sprint</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-amber">
+          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Lead Time</span>
+          <span class="kpi-val">{{ devopsSummary()?.leadTime?.avgDays ?? '—' }}d</span>
+          <span class="kpi-delta">avg per task</span>
+        </div>
+      </div>
+    </div>
+
+    @if (!sprintReport()) {
+      <div class="empty-state" style="margin-top:2rem">
+        <p>Select a space and sprint to view report data.</p>
+      </div>
+    } @else {
+      <div class="reports-grid">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Status Breakdown</div></div>
+          <div class="dept-bar-list">
+            @for (entry of [
+              {label:'To Do',       val: sprintReport().breakdown?.byStatus?.Todo ?? 0,       color:'#9ca3af'},
+              {label:'In Progress', val: sprintReport().breakdown?.byStatus?.InProgress ?? 0, color:'#6366f1'},
+              {label:'Done',        val: sprintReport().totals?.done,                          color:'#10b981'}
+            ]; track entry.label) {
+              <div class="dbl-row">
+                <span class="dbl-name">{{ entry.label }}</span>
+                <div class="dbl-track">
+                  <div class="dbl-fill"
+                       [style.width]="sprintReport().totals?.total ? (entry.val / sprintReport().totals.total * 100) + '%' : '0'"
+                       [style.background]="entry.color">
+                  </div>
+                </div>
+                <span class="dbl-val">{{ entry.val }}</span>
+              </div>
+            }
+          </div>
+          <div class="sprint-prog-row" style="margin-top:1rem">
+            <div class="sprint-prog-track">
+              <div class="sprint-prog-fill" [style.width]="sprintCompletionPct + '%'"></div>
+            </div>
+            <span class="sprint-prog-pct">{{ sprintCompletionPct }}% complete</span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Priority Breakdown</div></div>
+          <div class="dept-bar-list">
+            @for (entry of [
+              {label:'Urgent', key:'Urgent', color:'#ef4444'},
+              {label:'High',   key:'High',   color:'#f97316'},
+              {label:'Medium', key:'Medium', color:'#f59e0b'},
+              {label:'Low',    key:'Low',    color:'#10b981'}
+            ]; track entry.key) {
+              <div class="dbl-row">
+                <span class="dbl-name">{{ entry.label }}</span>
+                <div class="dbl-track">
+                  <div class="dbl-fill"
+                       [style.width]="sprintReport().totals?.total ? ((sprintReport().breakdown?.byPriority?.[entry.key] ?? 0) / sprintReport().totals.total * 100) + '%' : '0'"
+                       [style.background]="entry.color">
+                  </div>
+                </div>
+                <span class="dbl-val">{{ sprintReport().breakdown?.byPriority?.[entry.key] ?? 0 }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- ════════════════════════════════
+       SPRINT REPORT
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'sprint') {
+    <div class="rpt-content">
+      @if (!sprintReport()) {
+        <div class="empty-state"><p>Select a space and sprint to view the sprint report.</p></div>
+      } @else {
+        <div class="sprint-summary-grid">
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">{{ sprintReport().sprint?.name }}</h3>
+              <span class="panel-sub">
+                {{ sprintReport().sprint?.startDate | date:'MMM d' }} –
+                {{ sprintReport().sprint?.endDate   | date:'MMM d, y' }}
+              </span>
+            </div>
+            <div class="sprint-kpis">
+              <div class="sk-item"><span class="sk-val">{{ sprintReport().totals?.total }}</span><span class="sk-lbl">Total Tasks</span></div>
+              <div class="sk-item sk-green"><span class="sk-val">{{ sprintReport().totals?.done }}</span><span class="sk-lbl">Done</span></div>
+              <div class="sk-item sk-red"><span class="sk-val">{{ (sprintReport().totals?.total ?? 0) - (sprintReport().totals?.done ?? 0) }}</span><span class="sk-lbl">Remaining</span></div>
+              <div class="sk-item sk-amber"><span class="sk-val">{{ sprintReport().totals?.totalPoints ?? 0 }}</span><span class="sk-lbl">Story Points</span></div>
+            </div>
+            <div class="sprint-prog-row">
+              <div class="sprint-prog-track"><div class="sprint-prog-fill" [style.width]="sprintCompletionPct + '%'"></div></div>
+              <span class="sprint-prog-pct">{{ sprintCompletionPct }}%</span>
+            </div>
+          </div>
+          <!-- Burndown -->
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Burndown Chart</h3></div>
+            @if (burndownData().length === 0) {
+              <p style="color:var(--color-text-secondary);font-size:.85rem">No burndown data.</p>
+            } @else {
+              <div class="line-chart-wrap">
+                <div class="lc-grid">
+                  @for (pt of burndownData(); track pt.date) {
+                    <div class="lc-col">
+                      <div class="lc-bars">
+                        <div class="lc-actual-bar"
+                             [style.height]="barH(pt.remaining, BD_MAX)"
+                             [title]="'Remaining: ' + pt.remaining">
+                        </div>
+                      </div>
+                      <span class="lc-lbl">{{ pt.date | date:'d' }}</span>
+                    </div>
+                  }
+                </div>
+                <div class="lc-legend">
+                  <span class="lcl-item"><span class="lcl-dot lcl-actual"></span>Remaining tasks</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Burnup -->
+        <div class="panel" style="margin-bottom:16px">
+          <div class="panel-header"><h3 class="panel-title">Burnup Chart</h3><span class="panel-sub">Completed vs scope</span></div>
+          @if (burnupData().length === 0) {
+            <p style="color:var(--color-text-secondary);font-size:.85rem">No burnup data.</p>
+          } @else {
+            <div class="burnup-wrap">
+              @for (pt of burnupData(); track pt.date) {
+                <div class="bu-col">
+                  <div class="bu-bars">
+                    <div class="bu-scope-bar" [style.height]="barH(pt.scope, BU_MAX)" [title]="'Scope: ' + pt.scope"></div>
+                    <div class="bu-done-bar"  [style.height]="barH(pt.completed, BU_MAX)" [title]="'Done: ' + pt.completed"></div>
+                  </div>
+                  <span class="bu-lbl">{{ pt.date | date:'d' }}</span>
+                </div>
+              }
+              <div class="bu-legend">
+                <span class="lcl-item"><span class="lcl-dot" style="background:#6366f1"></span>Completed</span>
+                <span class="lcl-item"><span class="lcl-dot" style="background:#e2e8f0"></span>Scope</span>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Task table -->
+        <div class="panel">
+          <div class="panel-header"><h3 class="panel-title">Tasks in Sprint</h3><span class="panel-sub">{{ sprintReport().tasks?.length }} tasks</span></div>
+          <table class="data-table">
+            <thead><tr><th>Title</th><th>Type</th><th>Priority</th><th>Status</th></tr></thead>
+            <tbody>
+              @for (task of sprintReport().tasks?.slice(0,15); track task._id) {
+                <tr>
+                  <td style="font-size:.82rem;font-weight:500">{{ task.title }}</td>
+                  <td style="font-size:.75rem;color:var(--color-text-secondary)">{{ task.type }}</td>
+                  <td><span class="badge" [class.p-high]="task.priority === 'High' || task.priority === 'Urgent'" [class.p-med]="task.priority === 'Medium'" [class.p-low]="task.priority === 'Low'">{{ task.priority }}</span></td>
+                  <td><span class="badge" [class.s-done]="task.status === 'Done'" [class.s-progress]="task.status === 'InProgress'" [class.s-todo]="task.status === 'Todo'">{{ task.status }}</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       VELOCITY
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'velocity') {
+    <div class="rpt-content">
+      <div class="panel">
+        <div class="panel-header"><h3 class="panel-title">Velocity Chart</h3><span class="panel-sub">Avg: {{ avgVelocity() }} pts/sprint</span></div>
+        @if (velocityData().length === 0) {
+          <p style="color:var(--color-text-secondary);font-size:.85rem">No velocity data available.</p>
+        } @else {
+          <div class="velocity-chart">
+            @for (d of velocityData(); track d.sprint) {
+              <div class="vel-group">
+                <div class="vel-bars">
+                  <div class="vel-bar vel-committed" [style.height]="barH(d.completedTasks || 0, VEL_MAX)" [title]="'Tasks: ' + d.completedTasks"></div>
+                  <div class="vel-bar vel-completed" [style.height]="barH(d.completedPoints || 0, VEL_MAX)" [title]="'Points: ' + d.completedPoints"></div>
+                </div>
+                <div class="vel-labels">
+                  <span class="vel-val">{{ d.completedTasks }}</span>
+                  <span class="vel-val vel-done-val">{{ d.completedPoints }}pts</span>
+                </div>
+                <span class="vel-sprint">{{ d.sprint }}</span>
+              </div>
+            }
+          </div>
+          <div class="vel-legend">
+            <span class="lcl-item"><span class="lcl-dot" style="background:#cbd5e1"></span>Tasks</span>
+            <span class="lcl-item"><span class="lcl-dot" style="background:#6366f1"></span>Points</span>
+          </div>
+          <div class="vel-avg-row">
+            <span class="vel-avg-label">Average velocity</span>
+            <div class="vel-avg-track"><div class="vel-avg-fill" [style.width]="barH(avgVelocity(), VEL_MAX)"></div></div>
+            <span class="vel-avg-val">{{ avgVelocity() }} pts</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       CUMULATIVE FLOW
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'flow') {
+    <div class="rpt-content">
+      <div class="panel">
+        <div class="panel-header"><h3 class="panel-title">Cumulative Flow Diagram</h3></div>
+        @if (flowData().length === 0) {
+          <p style="color:var(--color-text-secondary);font-size:.85rem">No flow data available.</p>
+        } @else {
+          <div class="cfd-chart">
+            @for (d of flowData(); track d.date) {
+              <div class="cfd-col">
+                <div class="cfd-stack">
+                  <div class="cfd-seg cfd-done"     [style.height]="flowBarHeight(d.done)"       [title]="'Done: '        + d.done"></div>
+                  <div class="cfd-seg cfd-progress" [style.height]="flowBarHeight(d.inProgress)"  [title]="'In Progress: ' + d.inProgress"></div>
+                  <div class="cfd-seg cfd-todo"     [style.height]="flowBarHeight(d.todo)"        [title]="'To Do: '       + d.todo"></div>
+                </div>
+                <span class="cfd-lbl">{{ d.date | date:'d' }}</span>
+              </div>
+            }
+          </div>
+          <div class="cfd-legend">
+            <span class="lcl-item"><span class="lcl-dot" style="background:#10b981"></span>Done</span>
+            <span class="lcl-item"><span class="lcl-dot" style="background:#6366f1"></span>In Progress</span>
+            <span class="lcl-item"><span class="lcl-dot" style="background:#e2e8f0"></span>To Do</span>
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       EPIC
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'epic') {
+    <div class="rpt-content">
+      <div class="panel">
+        <div class="panel-header"><h3 class="panel-title">Epic Report</h3></div>
+        @if (epics().length === 0) {
+          <p style="color:var(--color-text-secondary);font-size:.85rem">No epic data available.</p>
+        } @else {
+          <div class="epic-list">
+            @for (epic of epics(); track epic.name) {
+              <div class="epic-row">
+                <div class="epic-header-row">
+                  <span class="epic-dot" [style.background]="epic.color"></span>
+                  <span class="epic-name">{{ epic.name }}</span>
+                  <span class="epic-pct" [style.color]="epic.color">{{ epicPct(epic) }}%</span>
+                  <span class="epic-total">{{ epic.done }}/{{ epic.total }} tasks</span>
+                </div>
+                <div class="epic-track">
+                  <div class="epic-seg epic-done"
+                       [style.width]="epic.total ? (epic.done / epic.total * 100) + '%' : '0'"
+                       [style.background]="epic.color">
+                  </div>
+                  <div class="epic-seg epic-prog"
+                       [style.width]="epic.total ? (epic.inprogress / epic.total * 100) + '%' : '0'"
+                       [style.background]="epic.color + '60'">
+                  </div>
+                  <div class="epic-seg epic-todo"
+                       [style.width]="epic.total ? (epic.todo / epic.total * 100) + '%' : '0'">
+                  </div>
+                </div>
+                <div class="epic-counts">
+                  <span class="ec-done">{{ epic.done }} done</span>
+                  <span class="ec-prog">{{ epic.inprogress }} in progress</span>
+                  <span class="ec-todo">{{ epic.todo }} to do</span>
+                </div>
+              </div>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       CYCLE TIME
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'cycle') {
+    <div class="rpt-content">
+      <div class="panel">
+        <div class="panel-header"><h3 class="panel-title">Control Chart — Cycle Time</h3><span class="panel-sub">Avg: {{ CYCLE_AVG }}d · UCL: {{ CYCLE_UCL }}d</span></div>
+        <div class="ctrl-chart">
+          <div class="ctrl-ucl-line" [style.bottom]="(CYCLE_UCL / CYCLE_MAX * 100) + '%'">
+            <span class="ctrl-ucl-lbl">UCL {{ CYCLE_UCL }}d</span>
+          </div>
+          <div class="ctrl-avg-line" [style.bottom]="(CYCLE_AVG / CYCLE_MAX * 100) + '%'">
+            <span class="ctrl-avg-lbl">Avg {{ CYCLE_AVG }}d</span>
+          </div>
+          @for (d of cycleData; track d.task) {
+            <div class="ctrl-col">
+              <div class="ctrl-bar-wrap">
+                <div class="ctrl-bar"
+                     [style.height]="barH(d.days, CYCLE_MAX)"
+                     [style.background]="cycleBarColor(d.status)"
+                     [title]="d.task + ': ' + d.days + ' days'">
+                </div>
+                @if (d.status === 'outlier') { <span class="ctrl-outlier-flag">!</span> }
+              </div>
+              <span class="ctrl-lbl">{{ d.task }}</span>
+            </div>
+          }
+        </div>
+        <div class="ctrl-legend">
+          <span class="lcl-item"><span class="lcl-dot" style="background:#6366f1"></span>Normal</span>
+          <span class="lcl-item"><span class="lcl-dot" style="background:#ef4444"></span>Outlier</span>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════════════════
+       DEVOPS
+       ════════════════════════════════ -->
+  @if (!loadingReport() && activeTab() === 'devops') {
+    <div class="rpt-content">
+      @if (!devopsSummary()) {
+        <div class="empty-state"><p>No DevOps data available for this sprint.</p></div>
+      } @else {
+        <div class="dora-grid">
+          <div class="dora-card">
+            <span class="dora-label">Deployment Frequency</span>
+            <span class="dora-val">{{ devopsSummary().deploymentFrequency?.perWeek ?? '—' }}/week</span>
+            <span class="dora-trend delta-up">Total: {{ devopsSummary().deploymentFrequency?.total ?? 0 }}</span>
+          </div>
+          <div class="dora-card">
+            <span class="dora-label">Lead Time</span>
+            <span class="dora-val">{{ devopsSummary().leadTime?.avgDays ?? '—' }}d</span>
+            <span class="dora-trend">{{ (devopsSummary().leadTime?.avgHours ?? 0) | number:'1.1-1' }}h avg</span>
+          </div>
+          <div class="dora-card">
+            <span class="dora-label">Change Failure Rate</span>
+            <span class="dora-val">{{ devopsSummary().changeFailureRatePercent ?? '—' }}%</span>
+            <span class="dora-trend" [class.delta-up]="(devopsSummary().changeFailureRatePercent ?? 0) < 15">
+              {{ (devopsSummary().changeFailureRatePercent ?? 0) < 15 ? 'Healthy' : 'Needs attention' }}
+            </span>
+          </div>
+          <div class="dora-card">
+            <span class="dora-label">MTTR</span>
+            <span class="dora-val">{{ devopsSummary().mttr?.avgHours ?? '—' }}h</span>
+            <span class="dora-trend">{{ (devopsSummary().mttr?.avgDays ?? 0) | number:'1.1-1' }}d avg</span>
+          </div>
+        </div>
+
+        <div class="devops-charts">
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Lead Time Breakdown</h3></div>
+            <div class="lead-list">
+              @for (s of leadTimeData; track s.stage) {
+                <div class="lead-row">
+                  <span class="lead-stage">{{ s.stage }}</span>
+                  <div class="lead-track"><div class="lead-fill" [style.width]="barH(s.hours, LEAD_MAX)"></div></div>
+                  <span class="lead-val">{{ s.hours }}h</span>
+                </div>
+              }
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Summary</h3></div>
+            <p style="font-size:.82rem;color:var(--color-text-secondary);line-height:1.6">
+              {{ devopsSummary().note }}
+            </p>
+            <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem">
+              <div class="stat-row">
+                <span class="stat-lbl">Completed Deliveries</span>
+                <span class="stat-val-accent">{{ devopsSummary().deploymentFrequency?.total ?? 0 }}</span>
+              </div>
+              <div class="stat-row">
+                <span class="stat-lbl">Failed Changes</span>
+                <span class="stat-val-amber">{{ devopsSummary().failedChanges ?? 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+</div>

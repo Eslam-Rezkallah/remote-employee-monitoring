@@ -1,0 +1,25 @@
+<div class="page">
+  <div class="page-header">
+    <div><h1 class="page-title">FAQ</h1><p class="page-sub">Frequently asked questions about the system</p></div>
+  </div>
+  <div class="faq-grid">
+    <div>
+      <div class="faq-section">Getting Started</div>
+      <div class="faq-card"><div class="faq-q">How do I log in for the first time?</div><div class="faq-a">Use credentials provided by your Admin. On first login you'll be prompted to change your password and enable two-step verification (JWT + TOTP).</div></div>
+      <div class="faq-card"><div class="faq-q">What are the different user roles?</div><div class="faq-a"><strong class="faq-role">Admin</strong> (full access), <strong class="faq-role">Manager</strong> (team & project), and <strong class="faq-role">Employee</strong> (personal workspace). Access is enforced via RBAC with JIT tokens.</div></div>
+      <div class="faq-card"><div class="faq-q">How does the time tracking work?</div><div class="faq-a">Sessions are tracked automatically when you're active. You can also start/stop a timer manually on any task from the task detail page.</div></div>
+      <div class="faq-section faq-section-spaced">AI & Analytics</div>
+      <div class="faq-card"><div class="faq-q">What is AI Performance Clustering?</div><div class="faq-a">The ML model uses K-Means clustering to group employees (High / Average / Needs Attention) based on activity vectors: work hours, task completion, idle time, and keystrokes.</div></div>
+      <div class="faq-card"><div class="faq-q">How are anomalies detected?</div><div class="faq-a">The system uses unsupervised anomaly detection to flag deviations from normal patterns — like unusual idle spikes or sudden productivity drops.</div></div>
+    </div>
+    <div>
+      <div class="faq-section">Privacy & Security</div>
+      <div class="faq-card"><div class="faq-q">Are screenshots visible to other employees?</div><div class="faq-a">No. Screenshots are only accessible to Admins and direct Managers. Regular employees cannot view monitoring data of their peers.</div></div>
+      <div class="faq-card"><div class="faq-q">Is my data encrypted?</div><div class="faq-a">Yes. All data is encrypted in transit (HTTPS/TLS) and at rest (AES-256). Auth uses JWT with short-lived tokens. Passwords hashed with bcrypt. System is GDPR & ISO 27001 compliant.</div></div>
+      <div class="faq-section faq-section-spaced">Tasks & Projects</div>
+      <div class="faq-card"><div class="faq-q">Can the AI assign tasks automatically?</div><div class="faq-a">Yes. The AI Task Suggestion engine analyzes current workloads and skill matches to recommend the best assignee. Managers can accept or override suggestions.</div></div>
+      <div class="faq-card"><div class="faq-q">How do I create a workflow automation rule?</div><div class="faq-a">Go to <code>Settings → Workflow Automation</code>. Use the no-code rule builder: define a trigger (e.g. task status changes) and an action (e.g. send notification, reassign, move column).</div></div>
+      <div class="faq-card"><div class="faq-q">What file types can I attach to tasks?</div><div class="faq-a">Images, PDFs, documents, and code files up to 25 MB each. All attachments are stored in AWS S3 with access control policies.</div></div>
+    </div>
+  </div>
+</div>

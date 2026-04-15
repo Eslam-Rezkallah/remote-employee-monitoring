@@ -1,0 +1,247 @@
+/* ══════════════════════════════════════════════════════
+   Org Settings — CSS
+   ══════════════════════════════════════════════════════ */
+
+/* ── Tabs ─────────────────────────────────────────────── */
+.os-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--color-border-tertiary, #e5e7eb);
+  padding-bottom: 0;
+  overflow-x: auto;
+}
+
+.os-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6b7280);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  white-space: nowrap;
+}
+.os-tab:hover {
+  color: var(--color-text-primary, #111);
+}
+.os-tab-active {
+  color: #6366f1;
+  border-bottom-color: #6366f1;
+}
+.os-tab svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.os-tab-danger { color: #ef4444; }
+.os-tab-danger.os-tab-active { border-bottom-color: #ef4444; }
+
+/* ── Section container ────────────────────────────────── */
+.os-section {
+  max-width: 720px;
+}
+
+/* ── Card title ───────────────────────────────────────── */
+.os-card-title {
+  font-size: .95rem;
+  font-weight: 600;
+  color: var(--color-text-primary, #111);
+  margin: 0;
+}
+
+/* ── Form fields ──────────────────────────────────────── */
+.os-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.os-label {
+  font-size: .78rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.os-input {
+  padding: 8px 12px;
+  font-size: .85rem;
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  border-radius: 8px;
+  background: var(--color-background-primary, #fff);
+  color: var(--color-text-primary, #111);
+  outline: none;
+  transition: border-color .15s;
+}
+.os-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, .1);
+}
+
+.os-hint {
+  font-size: .72rem;
+  color: var(--color-text-secondary, #9ca3af);
+  margin-top: 2px;
+}
+
+/* ── Join Code ────────────────────────────────────────── */
+.os-join-code-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: .75rem;
+  padding: 10px 14px;
+  background: var(--color-background-secondary, #f9fafb);
+  border: 1px dashed var(--color-border-secondary, #d1d5db);
+  border-radius: 10px;
+  width: fit-content;
+}
+
+.os-join-code {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-family: monospace;
+  letter-spacing: .12em;
+  color: #6366f1;
+  user-select: all;
+}
+
+/* ── Invite form ──────────────────────────────────────── */
+.os-invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+  margin-top: 1rem;
+  max-width: 400px;
+}
+
+/* ── Alert messages ───────────────────────────────────── */
+.os-alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: .82rem;
+  font-weight: 500;
+}
+.os-alert svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.os-alert-success {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.os-alert-error {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* ── Members table ────────────────────────────────────── */
+.os-members-table {
+  overflow-x: auto;
+}
+
+.os-role-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: .72rem;
+  font-weight: 600;
+  border-radius: 6px;
+  background: var(--color-background-secondary, #f3f4f6);
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.os-role-owner {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.os-role-admin {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.os-role-select {
+  padding: 4px 8px;
+  font-size: .78rem;
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  border-radius: 6px;
+  background: var(--color-background-primary, #fff);
+  color: var(--color-text-primary, #111);
+  cursor: pointer;
+  outline: none;
+}
+.os-role-select:focus {
+  border-color: #6366f1;
+}
+
+.os-remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--color-text-secondary, #9ca3af);
+  cursor: pointer;
+  transition: all .15s;
+}
+.os-remove-btn:hover {
+  color: #ef4444;
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+/* ── Danger card ──────────────────────────────────────── */
+.os-danger-card {
+  border: 1px solid #fecaca;
+}
+
+/* ── Buttons (shared) ─────────────────────────────────── */
+.btn-primary {
+  padding: 8px 18px;
+  font-size: .82rem;
+  font-weight: 500;
+  color: #fff;
+  background: #6366f1;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-primary:hover { background: #4f46e5; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-ghost {
+  padding: 8px 14px;
+  font-size: .82rem;
+  font-weight: 500;
+  color: var(--color-text-secondary, #6b7280);
+  background: none;
+  border: 1px solid var(--color-border-tertiary, #e5e7eb);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-ghost:hover { background: var(--color-background-secondary, #f3f4f6); }
+
+.btn-danger {
+  padding: 8px 18px;
+  font-size: .82rem;
+  font-weight: 500;
+  color: #fff;
+  background: #ef4444;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.btn-danger:hover { background: #dc2626; }
+.btn-danger:disabled { opacity: .5; cursor: not-allowed; }

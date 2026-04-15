@@ -1,0 +1,17 @@
+<a href="#main-content" class="skip-link">Skip to main content</a>
+<app-toast></app-toast>
+
+<!-- Shell: Navbar (top) + Sidebar (left) + Page content (right) -->
+<div class="layout-root">
+  <!-- Top Navbar -->
+  <app-navbar class="layout-navbar"></app-navbar>
+  <!-- Body row -->
+  <div class="layout-body">
+    <!-- Sidebar -->
+    <app-sidebar class="layout-sidebar"></app-sidebar>
+    <!-- Main content -->
+    <main id="main-content" class="layout-main">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+</div>

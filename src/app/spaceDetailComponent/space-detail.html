@@ -1,0 +1,847 @@
+@if (space()) {
+  <div class="page">
+    <!-- ── Header ── -->
+    <div class="page-header">
+      <div class="sd-title-row">
+        <a routerLink="/dashboard/spaces" class="back-link">← Spaces</a>
+        <div class="sd-icon-wrap" [style.background]="space()!.color + '20'">
+          {{ space()!.icon }}
+        </div>
+        <div>
+          <h1 class="page-title" style="margin: 0">{{ space()!.name }}</h1>
+          <span class="sd-key-label">{{ space()!.key }} · {{ space()!.type | titlecase }}</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-primary" (click)="createTaskOpen.set(true)">
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          New Task
+        </button>
+        <button class="btn-outline" (click)="toggleStar()">
+          {{ space()!.isStarred ? '★ Starred' : '☆ Star' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Tabs ── -->
+    <div class="sd-tabs">
+      <button
+        class="sd-tab"
+        [class.active]="activeTab() === 'summary'"
+        (click)="activeTab.set('summary')"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"
+          />
+        </svg>
+        Summary
+      </button>
+      <button
+        class="sd-tab"
+        [class.active]="activeTab() === 'timeline'"
+        (click)="activeTab.set('timeline')"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5"
+          />
+        </svg>
+        Timeline
+      </button>
+      <button
+        class="sd-tab"
+        [class.active]="activeTab() === 'backlog'"
+        (click)="activeTab.set('backlog')"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+          />
+        </svg>
+        Backlog
+      </button>
+      <button
+        class="sd-tab"
+        [class.active]="activeTab() === 'board'"
+        (click)="activeTab.set('board')"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
+          />
+        </svg>
+        Board
+      </button>
+      <button
+        class="sd-tab"
+        [class.active]="activeTab() === 'calendar'"
+        (click)="activeTab.set('calendar')"
+      >
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5m-9-6h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM12 15h.008v.008H12V15Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-4.875 0h.008v.008H7.5V15Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+          />
+        </svg>
+        Calendar
+      </button>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════
+       SUMMARY TAB
+       ════════════════════════════════════════════════════════════ -->
+    @if (activeTab() === 'summary') {
+      <div class="tab-content">
+        <div class="summary-grid-top">
+          <div class="panel">
+            <div class="panel-header">
+              <h3 class="panel-title">Status Overview</h3>
+              <span class="panel-sub">{{ statusCounts().total }} total tasks</span>
+            </div>
+            <div class="status-bars">
+              <div class="status-bar-row">
+                <span class="status-lbl">To Do</span>
+                <div class="status-track">
+                  <div
+                    class="status-fill sf-todo"
+                    [style.width]="
+                      statusCounts().total
+                        ? (statusCounts().todo / statusCounts().total) * 100 + '%'
+                        : '0'
+                    "
+                  ></div>
+                </div>
+                <span class="status-count">{{ statusCounts().todo }}</span>
+              </div>
+              <div class="status-bar-row">
+                <span class="status-lbl">In Progress</span>
+                <div class="status-track">
+                  <div
+                    class="status-fill sf-prog"
+                    [style.width]="
+                      statusCounts().total
+                        ? (statusCounts().inprogress / statusCounts().total) * 100 + '%'
+                        : '0'
+                    "
+                  ></div>
+                </div>
+                <span class="status-count">{{ statusCounts().inprogress }}</span>
+              </div>
+              <div class="status-bar-row">
+                <span class="status-lbl">In Review</span>
+                <div class="status-track">
+                  <div
+                    class="status-fill sf-review"
+                    [style.width]="
+                      statusCounts().total
+                        ? (statusCounts().inreview / statusCounts().total) * 100 + '%'
+                        : '0'
+                    "
+                  ></div>
+                </div>
+                <span class="status-count">{{ statusCounts().inreview }}</span>
+              </div>
+              <div class="status-bar-row">
+                <span class="status-lbl">Done</span>
+                <div class="status-track">
+                  <div
+                    class="status-fill sf-done"
+                    [style.width]="
+                      statusCounts().total
+                        ? (statusCounts().done / statusCounts().total) * 100 + '%'
+                        : '0'
+                    "
+                  ></div>
+                </div>
+                <span class="status-count">{{ statusCounts().done }}</span>
+              </div>
+            </div>
+            <div class="done-progress-row">
+              <div class="done-track">
+                <div
+                  class="done-fill"
+                  [style.width]="
+                    statusCounts().total
+                      ? (statusCounts().done / statusCounts().total) * 100 + '%'
+                      : '0'
+                  "
+                  [style.background]="space()!.color"
+                ></div>
+              </div>
+              <span class="done-pct"
+                >{{
+                  statusCounts().total
+                    ? ((statusCounts().done / statusCounts().total) * 100 | number: '1.0-0')
+                    : 0
+                }}% complete</span
+              >
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Priority Breakdown</h3></div>
+            <div class="priority-list">
+              @for (
+                p of [
+                  ['highest', '🔴'],
+                  ['high', '🟠'],
+                  ['medium', '🟡'],
+                  ['low', '🟢'],
+                  ['lowest', '🔵'],
+                ];
+                track p[0]
+              ) {
+                <div class="priority-row">
+                  <span class="p-emoji">{{ p[1] }}</span>
+                  <span class="p-label">{{ p[0] | titlecase }}</span>
+                  <div class="p-track">
+                    <div
+                      class="p-fill"
+                      [style.width]="
+                        statusCounts().total
+                          ? (getPriorityCount(p[0]) / statusCounts().total) * 100 + '%'
+                          : '0'
+                      "
+                      [style.background]="priorityColor(p[0])"
+                    ></div>
+                  </div>
+                  <span class="p-count">{{ getPriorityCount(p[0]) }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+        <div class="summary-grid-mid">
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Team Workload</h3></div>
+            <div class="workload-list">
+              @for (assignee of assignees().slice(1); track assignee) {
+                <div class="workload-row">
+                  <div class="wl-av">{{ assignee.charAt(0) }}</div>
+                  <div class="wl-info">
+                    <span class="wl-name">{{ assignee }}</span>
+                    <div class="wl-track">
+                      <div
+                        class="wl-fill"
+                        [style.width]="getAssigneeTaskPercent(assignee)"
+                        [style.background]="space()!.color"
+                      ></div>
+                    </div>
+                  </div>
+                  <span class="wl-count">{{ getAssigneeTaskCount(assignee) }}</span>
+                </div>
+              }
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Types of Work</h3></div>
+            <div class="work-type-grid">
+              <div class="wt-card wt-task">
+                <span class="wt-icon">✓</span
+                ><span class="wt-count">{{ workTypeCounts().task }}</span
+                ><span class="wt-label">Tasks</span>
+              </div>
+              <div class="wt-card wt-feature">
+                <span class="wt-icon">★</span
+                ><span class="wt-count">{{ workTypeCounts().feature }}</span
+                ><span class="wt-label">Features</span>
+              </div>
+              <div class="wt-card wt-bug">
+                <span class="wt-icon">🐛</span
+                ><span class="wt-count">{{ workTypeCounts().bug }}</span
+                ><span class="wt-label">Bugs</span>
+              </div>
+              <div class="wt-card wt-epic">
+                <span class="wt-icon">⚡</span
+                ><span class="wt-count">{{ workTypeCounts().epic }}</span
+                ><span class="wt-label">Epics</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="summary-grid-bot">
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">Recent Activity</h3></div>
+            <div class="activity-list">
+              @for (task of recentActivity(); track task.id) {
+                <div class="activity-item">
+                  <div class="act-dot" [style.background]="statusColor(task.status)"></div>
+                  <div class="act-info">
+                    <span class="act-title">{{ task.title }}</span>
+                    <span class="act-meta"
+                      >{{ task.assignee }} · {{ statusLabel(task.status) }}</span
+                    >
+                  </div>
+                  <span
+                    class="act-badge"
+                    [style.background]="priorityColor(task.priority) + '18'"
+                    [style.color]="priorityColor(task.priority)"
+                    >{{ task.priority | titlecase }}</span
+                  >
+                </div>
+              }
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><h3 class="panel-title">By Component</h3></div>
+            <div class="component-list">
+              @for (comp of componentCounts(); track comp[0]) {
+                <div class="comp-row">
+                  <span class="comp-name">{{ comp[0] }}</span>
+                  <div class="comp-track">
+                    <div
+                      class="comp-fill"
+                      [style.width]="(comp[1] / (statusCounts().total || 1)) * 100 + '%'"
+                      [style.background]="space()!.color"
+                    ></div>
+                  </div>
+                  <span class="comp-count">{{ comp[1] }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════════
+       TIMELINE TAB
+       ════════════════════════════════════════════════════════════ -->
+    @if (activeTab() === 'timeline') {
+      <div class="tab-content">
+        <div class="timeline-controls">
+          <div class="search-wrap">
+            <svg
+              class="search-icon h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search timeline…"
+              [value]="timelineSearch()"
+              (input)="timelineSearch.set($any($event.target).value)"
+            />
+          </div>
+          <select
+            class="filter-select"
+            [value]="timelineAssignee()"
+            (change)="timelineAssignee.set($any($event.target).value)"
+          >
+            @for (a of assignees(); track a) {
+              <option [value]="a">{{ a === 'all' ? 'All Assignees' : a }}</option>
+            }
+          </select>
+        </div>
+        @for (sprint of sprints(); track sprint) {
+          <div class="sprint-block">
+            <div class="sprint-header">
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+                />
+              </svg>
+              <span class="sprint-name">{{ sprint }}</span>
+              <span class="sprint-count">{{ getTimelineBySprintCount(sprint) }} tasks</span>
+            </div>
+            <div class="timeline-rows">
+              @for (task of getTimelineBySprintTasks(sprint); track task.id) {
+                <div class="timeline-row">
+                  <div class="tl-left">
+                    <span class="tl-type-icon" [style.color]="priorityColor(task.priority)">{{
+                      workTypeIcon(task.workType)
+                    }}</span>
+                    <span class="tl-title">{{ task.title }}</span>
+                  </div>
+                  <div class="tl-bar-area">
+                    <div
+                      class="tl-bar"
+                      [style.background]="space()!.color + '30'"
+                      [style.border-color]="space()!.color"
+                    >
+                      <div
+                        class="tl-bar-fill"
+                        [style.width]="task.progress + '%'"
+                        [style.background]="space()!.color"
+                      ></div>
+                    </div>
+                  </div>
+                  <div class="tl-right">
+                    <span class="tl-dates">{{ task.startDate }} → {{ task.dueDate }}</span>
+                    <div class="tl-assignee-av" [title]="task.assignee">
+                      {{ task.assigneeInitial }}
+                    </div>
+                    <span
+                      class="tl-status-dot"
+                      [style.background]="statusColor(task.status)"
+                      [title]="statusLabel(task.status)"
+                    ></span>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════════
+       BACKLOG TAB
+       ════════════════════════════════════════════════════════════ -->
+    @if (activeTab() === 'backlog') {
+      <div class="tab-content">
+        <div class="backlog-controls">
+          <div class="search-wrap">
+            <svg
+              class="search-icon h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+              />
+            </svg>
+            <input
+              class="search-input"
+              type="text"
+              placeholder="Search backlog…"
+              [value]="backlogSearch()"
+              (input)="backlogSearch.set($any($event.target).value)"
+            />
+          </div>
+          <select
+            class="filter-select"
+            [value]="backlogFilter()"
+            (change)="backlogFilter.set($any($event.target).value)"
+          >
+            <option value="all">All Status</option>
+            <option value="todo">To Do</option>
+            <option value="inprogress">In Progress</option>
+            <option value="inreview">In Review</option>
+            <option value="done">Done</option>
+          </select>
+          <select
+            class="filter-select"
+            [value]="backlogSort()"
+            (change)="backlogSort.set($any($event.target).value)"
+          >
+            <option value="priority">Sort: Priority</option>
+            <option value="date">Sort: Date</option>
+            <option value="title">Sort: Title</option>
+          </select>
+          <button class="btn-primary btn-sm" (click)="createTaskOpen.set(true)">+ Task</button>
+        </div>
+        @for (sprint of sprints(); track sprint) {
+          @if (getSprintTasks(sprint).length > 0) {
+            <div class="backlog-sprint-group">
+              <div class="backlog-sprint-header">
+                <svg
+                  class="h-3.5 w-3.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+                  />
+                </svg>
+                {{ sprint }}
+                <span class="bl-sprint-count">{{ getSprintTasks(sprint).length }}</span>
+              </div>
+              @for (task of getSprintTasks(sprint); track task.id) {
+                <div class="backlog-item">
+                  <span class="bl-type" [title]="task.workType">{{
+                    workTypeIcon(task.workType)
+                  }}</span>
+                  <div class="bl-main">
+                    <span class="bl-title">{{ task.title }}</span>
+                    <div class="bl-tags">
+                      @for (label of task.labels; track label) {
+                        <span class="bl-tag">{{ label }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="bl-meta">
+                    <span
+                      class="bl-status-badge"
+                      [style.background]="statusColor(task.status) + '18'"
+                      [style.color]="statusColor(task.status)"
+                      >{{ statusLabel(task.status) }}</span
+                    >
+                    <span
+                      class="bl-priority-dot"
+                      [style.background]="priorityColor(task.priority)"
+                      [title]="task.priority | titlecase"
+                    ></span>
+                    <span class="bl-due">{{ task.dueDate }}</span>
+                    <div
+                      class="bl-av"
+                      [title]="task.assignee"
+                      [style.background]="task.assigneeColor"
+                    >
+                      {{ task.assigneeInitial }}
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════════
+       BOARD TAB — FE-5.1 to 5.6
+       ════════════════════════════════════════════════════════════ -->
+    @if (activeTab() === 'board') {
+      <div class="tab-content">
+        <!-- FE-5.4 Board controls with New Sprint button -->
+        <div class="board-controls">
+          <div class="sprint-selector-sm">
+            @for (sp of sprints(); track sp) {
+              <button
+                class="sprint-tab-sm"
+                [class.active]="sp === currentBoardSprint()"
+                (click)="activeBoardSprint.set(sp)"
+              >
+                {{ sp }}
+              </button>
+            }
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center">
+            <button class="btn-outline btn-sm" (click)="createSprintOpen.set(true)">
+              <svg
+                class="h-3.5 w-3.5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+                />
+              </svg>
+              New Sprint
+            </button>
+            <button class="btn-primary btn-sm" (click)="createTaskOpen.set(true)">+ Task</button>
+          </div>
+        </div>
+
+        <div class="sd-kanban">
+          @for (
+            col of [
+              { status: 'todo', label: 'To Do', dot: '#9ca3af' },
+              { status: 'inprogress', label: 'In Progress', dot: '#6366f1' },
+              { status: 'inreview', label: 'In Review', dot: '#f59e0b' },
+              { status: 'done', label: 'Done', dot: '#10b981' },
+            ];
+            track col.status
+          ) {
+            <div
+              class="sdk-col"
+              [class.sdk-drag-over]="boardDragOverCol() === col.status"
+              (dragover)="onBoardDragOver($any(col.status), $event)"
+              (dragleave)="boardDragOverCol.set(null)"
+              (drop)="onBoardDrop($any(col.status), $event)"
+            >
+              <div class="sdk-header">
+                <span class="sdk-dot" [style.background]="col.dot"></span>
+                <span class="sdk-label">{{ col.label }}</span>
+                <span class="sdk-count">{{ getBoardColTasks($any(col.status)).length }}</span>
+              </div>
+              @for (task of getBoardColTasks($any(col.status)); track task.id) {
+                <div
+                  class="sdk-card"
+                  [class.sdk-done]="task.status === 'done'"
+                  [class.sdk-dragging]="boardDraggedId() === task.id"
+                  draggable="true"
+                  (dragstart)="onBoardDragStart(task.id, $event)"
+                  (dragend)="onBoardDragEnd()"
+                >
+                  <div class="sdk-top">
+                    <span
+                      class="sdk-badge"
+                      [style.background]="priorityColor(task.priority) + '18'"
+                      [style.color]="priorityColor(task.priority)"
+                      >{{ task.priority | titlecase }}</span
+                    >
+                    <span class="sdk-type">{{ workTypeIcon(task.workType) }}</span>
+                    <span class="sdk-due">{{ task.dueDate }}</span>
+                  </div>
+                  <span class="sdk-title" [class.sdk-title-done]="task.status === 'done'">{{
+                    task.title
+                  }}</span>
+                  @if (task.status === 'inprogress' && task.progress > 0) {
+                    <div class="sdk-prog">
+                      <div class="sdk-prog-fill" [style.width]="task.progress + '%'"></div>
+                    </div>
+                  }
+                  @if (task.labels.length > 0) {
+                    <div class="sdk-labels">
+                      @for (lbl of task.labels.slice(0, 2); track lbl) {
+                        <span class="sdk-lbl">{{ lbl }}</span>
+                      }
+                    </div>
+                  }
+                  <div class="sdk-footer">
+                    <div class="sdk-av" [style.background]="task.assigneeColor">
+                      {{ task.assigneeInitial }}
+                    </div>
+                    <span class="sdk-name">{{ task.assignee }}</span>
+                  </div>
+                </div>
+              }
+              @if (getBoardColTasks($any(col.status)).length === 0) {
+                <div class="sdk-empty">Drop tasks here</div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- ════════════════════════════════════════════════════════════
+       CALENDAR TAB — FE-5.7 to 5.15
+       ════════════════════════════════════════════════════════════ -->
+    @if (activeTab() === 'calendar') {
+      <div class="tab-content cal-layout">
+        <div class="cal-main">
+          <div class="cal-filters">
+            <select
+              class="filter-select"
+              [value]="calendarFilter().assignee"
+              (change)="calendarFilter.set({...calendarFilter(), assignee: $any($event.target).value})"
+            >
+              @for (a of assignees(); track a) {
+                <option [value]="a">{{ a === 'all' ? 'All Assignees' : a }}</option>
+              }
+            </select>
+            <select
+              class="filter-select"
+              [value]="calendarFilter().type"
+              (change)="calendarFilter.set({...calendarFilter(), type: $any($event.target).value})"
+            >
+              <option value="all">All Types</option>
+              <option value="task">Task</option>
+              <option value="feature">Feature</option>
+              <option value="bug">Bug</option>
+              <option value="epic">Epic</option>
+            </select>
+            <select
+              class="filter-select"
+              [value]="calendarFilter().status"
+              (change)="calendarFilter.set({...calendarFilter(), status: $any($event.target).value})"
+            >
+              <option value="all">All Status</option>
+              <option value="todo">To Do</option>
+              <option value="inprogress">In Progress</option>
+              <option value="inreview">In Review</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <div class="cal-nav">
+            <button class="cal-nav-btn" (click)="prevMonth()">
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M15.75 19.5 8.25 12l7.5-7.5"
+                />
+              </svg>
+            </button>
+            <span class="cal-month-label">{{ calendarMonthLabel() }}</span>
+            <button class="cal-nav-btn" (click)="nextMonth()">
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="m8.25 4.5 7.5 7.5-7.5 7.5"
+                />
+              </svg>
+            </button>
+          </div>
+          <div class="cal-weekdays">
+            @for (d of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; track d) {
+              <div class="cal-wd">{{ d }}</div>
+            }
+          </div>
+          <div class="cal-grid">
+            @for (day of calendarDays(); track $index) {
+              <div
+                class="cal-cell"
+                [class.cal-cell-empty]="!day"
+                [class.cal-today]="day && isToday(day)"
+                [class.cal-selected]="day && selectedDay()?.toDateString() === day.toDateString()"
+                [class.cal-dragover]="day && draggedCalTask() !== null"
+                (click)="selectDay(day)"
+                (dragover)="day && $event.preventDefault()"
+                (drop)="day && onCalDrop(day, $event)"
+              >
+                @if (day) {
+                  <span class="cal-day-num">{{ day.getDate() }}</span>
+                  <div class="cal-day-tasks">
+                    @for (task of getTasksForDay(day).slice(0, 3); track task.id) {
+                      <div
+                        class="cal-task-pill"
+                        [style.background]="statusColor(task.status) + '22'"
+                        [style.color]="statusColor(task.status)"
+                        [title]="task.title"
+                      >
+                        {{ task.title | slice: 0 : 18 }}{{ task.title.length > 18 ? '…' : '' }}
+                      </div>
+                    }
+                    @if (getTasksForDay(day).length > 3) {
+                      <div class="cal-task-more">+{{ getTasksForDay(day).length - 3 }} more</div>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+          @if (selectedDay()) {
+            <div class="cal-popup-backdrop" (click)="selectedDay.set(null)"></div>
+            <div class="cal-popup" (click)="$event.stopPropagation()">
+              <div class="cal-popup-header">
+                <span class="cal-popup-date">{{
+                  selectedDay()!.toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    month: 'long',
+                    day: 'numeric',
+                  })
+                }}</span>
+                <button class="cal-popup-close" (click)="selectedDay.set(null)">
+                  <svg
+                    class="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              @if (getTasksForDay(selectedDay()!).length === 0) {
+                <p class="cal-popup-empty">No tasks scheduled for this day.</p>
+              } @else {
+                <div class="cal-popup-tasks">
+                  @for (task of getTasksForDay(selectedDay()!); track task.id) {
+                    <div class="cal-popup-task">
+                      <span class="cpp-type">{{ workTypeIcon(task.workType) }}</span>
+                      <div class="cpp-info">
+                        <span class="cpp-title">{{ task.title }}</span>
+                        <span class="cpp-meta"
+                          >{{ task.assignee }} · {{ statusLabel(task.status) }}</span
+                        >
+                      </div>
+                      <span
+                        class="cpp-badge"
+                        [style.background]="priorityColor(task.priority) + '18'"
+                        [style.color]="priorityColor(task.priority)"
+                        >{{ task.priority | titlecase }}</span
+                      >
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+        <div class="cal-unscheduled">
+          <div class="cu-header">
+            <span class="cu-title">Unscheduled</span>
+            <span class="cu-count">{{ unscheduledTasks().length }}</span>
+          </div>
+          <p class="cu-hint">Drag tasks onto a calendar date to schedule them.</p>
+          @if (unscheduledTasks().length === 0) {
+            <div class="cu-empty">All tasks are scheduled!</div>
+          } @else {
+            <div class="cu-list">
+              @for (task of unscheduledTasks(); track task.id) {
+                <div
+                  class="cu-task"
+                  draggable="true"
+                  [class.cu-dragging]="draggedCalTask() === task.id"
+                  (dragstart)="onCalDragStart(task.id)"
+                  (dragend)="draggedCalTask.set(null)"
+                >
+                  <span class="cu-type">{{ workTypeIcon(task.workType) }}</span>
+                  <div class="cu-info">
+                    <span class="cu-task-title">{{ task.title }}</span>
+                    <span class="cu-meta">{{ task.assignee }}</span>
+                  </div>
+                  <span class="cu-dot" [style.background]="priorityColor(task.priority)"></span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+}
+
+<!-- Create task modal -->
+@if (createTaskOpen()) {
+  <app-create-task [spaceId]="space()!._id" (close)="createTaskOpen.set(false)"> </app-create-task>
+}
+
+<!-- FE-5.4 Create sprint modal -->
+@if (createSprintOpen()) {
+  <app-create-sprint (close)="createSprintOpen.set(false)"></app-create-sprint>
+}

@@ -1,0 +1,421 @@
+<div class="messages-shell">
+
+  <!-- ══ SIDEBAR ══════════════════════════════════════════════ -->
+  <div class="conv-list">
+
+    <!-- Search -->
+    <div class="conv-search-wrap">
+      <svg class="conv-search-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"/>
+      </svg>
+      <input class="conv-search" [ngModel]="searchQuery()" (ngModelChange)="searchQuery.set($event)" placeholder="Search..."/>
+    </div>
+
+    @if (loadingRooms()) {
+      <div style="padding:1rem;text-align:center;color:var(--color-text-secondary);font-size:.8rem">Loading…</div>
+    }
+
+    <!-- Search results -->
+    @if (!loadingRooms() && filteredRooms) {
+      <div class="conv-section-label">Results</div>
+      @for (room of filteredRooms; track room._id) {
+        <div class="conv-item" [class.conv-active]="room._id === selectedRoom()?._id"
+             (click)="selectRoom(room)">
+          @if (room.type === 'channel') {
+            <div class="conv-icon">#</div>
+          } @else if (room.type === 'group' || room.type === 'organization') {
+            <div class="conv-icon conv-group-icon">{{ getRoomInitial(room) }}</div>
+          } @else {
+            <div class="conv-av emp-av av1">{{ getRoomInitial(room) }}</div>
+          }
+          <span class="conv-name">{{ getRoomDisplayName(room) }}</span>
+        </div>
+      }
+    }
+
+    @if (!loadingRooms() && !filteredRooms) {
+
+      <!-- Channels -->
+      <div class="conv-section-row">
+        <span class="conv-section-label">Channels</span>
+        <button class="conv-add-btn" (click)="showCreateChannel.set(true)" title="New channel">+</button>
+      </div>
+      @for (room of channels; track room._id) {
+        <div class="conv-item" [class.conv-active]="room._id === selectedRoom()?._id"
+             (click)="selectRoom(room)">
+          <div class="conv-icon">#</div>
+          <span class="conv-name">{{ getRoomDisplayName(room) }}</span>
+          @if (getUnread(room) > 0) {
+            <span class="conv-badge">{{ getUnread(room) }}</span>
+          }
+        </div>
+      }
+
+      <!-- Groups -->
+      <div class="conv-section-row" style="margin-top:.5rem">
+        <span class="conv-section-label">Group Chats</span>
+        <button class="conv-add-btn" (click)="showCreateGroup.set(true)" title="New group">+</button>
+      </div>
+      @for (room of groups; track room._id) {
+        <div class="conv-item" [class.conv-active]="room._id === selectedRoom()?._id"
+             (click)="selectRoom(room)">
+          <div class="conv-icon conv-group-icon">{{ getRoomInitial(room) }}</div>
+          <span class="conv-name">{{ getRoomDisplayName(room) }}</span>
+          @if (getUnread(room) > 0) {
+            <span class="conv-badge">{{ getUnread(room) }}</span>
+          }
+        </div>
+      }
+
+      <!-- DMs -->
+      <div class="conv-section-row" style="margin-top:.5rem">
+        <span class="conv-section-label">Direct Messages</span>
+        <button class="conv-add-btn" (click)="showCreateDM.set(true)" title="New DM">+</button>
+      </div>
+      @for (room of dms; track room._id) {
+        <div class="conv-item" [class.conv-active]="room._id === selectedRoom()?._id"
+             (click)="selectRoom(room)">
+          <div class="conv-av emp-av av1">{{ getRoomInitial(room) }}</div>
+          <span class="conv-name">{{ getRoomDisplayName(room) }}</span>
+          @if (getUnread(room) > 0) {
+            <span class="conv-badge">{{ getUnread(room) }}</span>
+          }
+        </div>
+      }
+
+    }
+  </div>
+
+  <!-- ══ CHAT AREA ════════════════════════════════════════════ -->
+  @if (selectedRoom()) {
+    <div class="chat-area">
+
+      <!-- Header -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          @if (selectedRoom()!.type === 'channel') {
+            <span class="chat-hash">#</span>
+          } @else {
+            <div class="chat-group-av">{{ getRoomInitial(selectedRoom()!) }}</div>
+          }
+          <div>
+            <span class="chat-title">{{ getRoomDisplayName(selectedRoom()!) }}</span>
+            <span class="chat-sub">{{ selectedRoom()!.members.length }} members</span>
+          </div>
+        </div>
+        <div class="chat-actions">
+          <div class="chat-divider"></div>
+          <button class="chat-action-btn" [class.chat-btn-active]="showMembers()"
+                  (click)="showMembers.set(!showMembers())">
+            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round"
+                d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
+            </svg>
+            <span class="chat-member-count">{{ selectedRoom()!.members.length }}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div class="chat-body">
+
+        <!-- Messages -->
+        <div class="chat-messages" #chatScroll>
+          @if (loadingMessages()) {
+            <div style="text-align:center;padding:2rem;color:var(--color-text-secondary);font-size:.8rem">Loading messages…</div>
+          }
+
+          @if (!loadingMessages() && messages().length === 0) {
+            <div style="text-align:center;padding:2rem;color:var(--color-text-secondary);font-size:.85rem">
+              No messages yet. Say hello! 👋
+            </div>
+          }
+
+          @if (messages().length > 0) {
+            <div class="date-divider">Today</div>
+          }
+
+          @for (msg of messages(); track msg._id) {
+            <div class="msg-row" [class.msg-own]="isMsgOwn(msg)">
+
+              @if (!isMsgOwn(msg)) {
+                <div class="msg-av emp-av av1">
+                  {{ msg.senderId.username.charAt(0).toUpperCase() }}
+                </div>
+              } @else {
+                <div class="msg-own-spacer"></div>
+              }
+
+              <div class="msg-body" [class.msg-own-body]="isMsgOwn(msg)">
+                @if (!isMsgOwn(msg)) {
+                  <div class="msg-meta">
+                    <span class="msg-sender">{{ msg.senderId.username }}</span>
+                    <span class="msg-time">{{ formatTime(msg.createdAt) }}</span>
+                  </div>
+                }
+
+                <!-- Editing mode -->
+                @if (editingMsgId() === msg._id) {
+                  <div class="msg-edit-wrap">
+                    <input class="msg-edit-input"
+                           [ngModel]="editingText()"
+                           (ngModelChange)="editingText.set($event)"
+                           (keydown.enter)="saveEdit()"
+                           (keydown.escape)="cancelEdit()"/>
+                    <div class="msg-edit-actions">
+                      <button class="msg-edit-btn msg-edit-save" (click)="saveEdit()">Save</button>
+                      <button class="msg-edit-btn msg-edit-cancel" (click)="cancelEdit()">Cancel</button>
+                    </div>
+                  </div>
+                } @else {
+
+                  <!-- Text -->
+                  @if (msg.messageType === 'text') {
+                    <div class="msg-text" [class.msg-own-text]="isMsgOwn(msg)">
+                      {{ msg.content }}
+                      @if (msg.edited) { <span style="font-size:.65rem;opacity:.6"> (edited)</span> }
+                      @if (isMsgOwn(msg)) {
+                        <span class="msg-own-time">{{ formatTime(msg.createdAt) }}</span>
+                      }
+                    </div>
+                  }
+
+                  <!-- Attachment / Image / File -->
+                  @if (msg.messageType === 'image' || msg.messageType === 'file') {
+                    <div class="attach-bubble" [class.attach-own]="isMsgOwn(msg)">
+                      <span class="attach-bubble-icon">
+                        {{ msg.messageType === 'image' ? '🖼️' : '📄' }}
+                      </span>
+                      <div class="attach-bubble-info">
+                        @for (att of msg.attachments; track att.url) {
+                          <span class="attach-bubble-name">{{ att.originalName }}</span>
+                        }
+                      </div>
+                      @if (isMsgOwn(msg)) {
+                        <span class="msg-own-time" style="align-self:flex-end">{{ formatTime(msg.createdAt) }}</span>
+                      }
+                    </div>
+                  }
+
+                  <!-- Message actions (hover) -->
+                  <div class="msg-actions-row">
+                    <!-- Reaction button -->
+                    <button class="msg-action-icon" (click)="toggleReactionMenu(msg._id)" title="React">
+                      😊
+                    </button>
+                    <!-- Edit (own messages only) -->
+                    @if (isMsgOwn(msg) && msg.messageType === 'text') {
+                      <button class="msg-action-icon" (click)="startEdit(msg)" title="Edit">
+                        ✏️
+                      </button>
+                    }
+                    <!-- Delete (own messages only) -->
+                    @if (isMsgOwn(msg)) {
+                      <button class="msg-action-icon msg-action-delete" (click)="deleteMessage(msg._id)" title="Delete">
+                        🗑️
+                      </button>
+                    }
+                  </div>
+
+                  <!-- Reaction picker -->
+                  @if (reactionMenuMsgId() === msg._id) {
+                    <div class="reaction-picker">
+                      @for (emoji of emojiOptions; track emoji) {
+                        <button class="reaction-pick-btn" (click)="addReaction(msg._id, emoji)">
+                          {{ emoji }}
+                        </button>
+                      }
+                    </div>
+                  }
+
+                }
+
+                <!-- Reactions display -->
+                @if (getGroupedReactions(msg).length > 0) {
+                  <div class="msg-reactions">
+                    @for (r of getGroupedReactions(msg); track r.emoji) {
+                      <span class="reaction-pill" [class.reaction-mine]="r.mine"
+                            (click)="addReaction(msg._id, r.emoji)">
+                        {{ r.emoji }} {{ r.count > 1 ? r.count : '' }}
+                      </span>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Typing indicator -->
+          @if (typingUsers().length > 0) {
+            <div class="typing-indicator">
+              <span>{{ typingUsers().join(', ') }} {{ typingUsers().length === 1 ? 'is' : 'are' }} typing…</span>
+            </div>
+          }
+        </div>
+
+        <!-- Members panel -->
+        <div class="members-panel" [class.members-open]="showMembers()">
+          <div class="members-panel-hdr">
+            <span class="members-panel-title">Members ({{ selectedRoom()!.members.length }})</span>
+            <button class="members-close" (click)="showMembers.set(false)">✕</button>
+          </div>
+          <div class="members-list">
+            @for (m of selectedRoom()!.members; track m._id) {
+              <div class="member-item">
+                <div class="member-av-wrap">
+                  <div class="emp-av av1" style="width:34px;height:34px;font-size:.78rem">
+                    {{ m.username.charAt(0).toUpperCase() }}
+                  </div>
+                </div>
+                <div class="member-info">
+                  <span class="member-name">{{ m.username }}</span>
+                  @if (m._id === currentUser?._id) {
+                    <span class="member-role">You</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Input bar -->
+      <div class="chat-input-bar">
+        <input class="chat-input" type="text"
+               [ngModel]="messageText()"
+               (ngModelChange)="messageText.set($event)"
+               (keydown)="handleKeydown($event)"
+               placeholder="Message {{ selectedRoom()!.type === 'channel' ? '#' : '' }}{{ getRoomDisplayName(selectedRoom()!) }}…"/>
+        <button class="send-btn" (click)="sendMessage()" [disabled]="!messageText().trim()">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+  } @else if (!loadingRooms()) {
+    <div class="chat-area" style="display:flex;align-items:center;justify-content:center;color:var(--color-text-secondary)">
+      <div style="text-align:center">
+        <p style="font-size:1.1rem;margin-bottom:.5rem">Select a conversation</p>
+        <p style="font-size:.85rem">Or create a new channel / group</p>
+      </div>
+    </div>
+  }
+
+</div>
+
+<!-- ══ Create Channel Modal ══════════════════════════════════ -->
+@if (showCreateChannel()) {
+  <div class="modal-overlay" (click)="showCreateChannel.set(false)">
+    <div class="modal-box" (click)="$event.stopPropagation()">
+      <div class="modal-hdr">
+        <span class="modal-ttl">Create a Channel</span>
+        <button class="modal-x" (click)="showCreateChannel.set(false)">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-lbl">Channel name</label>
+        <div class="modal-hash-wrap">
+          <span class="modal-hash">#</span>
+          <input class="modal-inp" [ngModel]="newChannelName()" (ngModelChange)="newChannelName.set($event)"
+                 placeholder="e.g. project-alpha" (keydown.enter)="createChannel()"/>
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn-outline" (click)="showCreateChannel.set(false)">Cancel</button>
+        <button class="btn-primary" (click)="createChannel()" [disabled]="!newChannelName().trim()">
+          Create Channel
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ══ Create Group Modal ════════════════════════════════════ -->
+@if (showCreateGroup()) {
+  <div class="modal-overlay" (click)="showCreateGroup.set(false)">
+    <div class="modal-box" (click)="$event.stopPropagation()">
+      <div class="modal-hdr">
+        <span class="modal-ttl">New Group Chat</span>
+        <button class="modal-x" (click)="showCreateGroup.set(false)">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-lbl">Group name</label>
+        <input class="modal-inp" style="padding-left:.85rem"
+               [ngModel]="newGroupName()" (ngModelChange)="newGroupName.set($event)"
+               placeholder="e.g. Sprint Team"/>
+        <label class="modal-lbl" style="margin-top:.85rem">Add members</label>
+        <div class="pick-list">
+          <!-- FIX: Use org members instead of selected room members -->
+          @for (m of orgMembers(); track m._id) {
+            @if (m._id !== currentUser?._id) {
+              <div class="pick-row"
+                   [class.pick-selected]="selectedGroupMembers().includes(m._id)"
+                   (click)="toggleGroupMember(m._id)">
+                <div class="emp-av av1" style="width:28px;height:28px;font-size:.62rem">
+                  {{ m.username.charAt(0).toUpperCase() }}
+                </div>
+                <span class="pick-name">{{ m.username }}</span>
+                @if (selectedGroupMembers().includes(m._id)) {
+                  <svg class="pick-check" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"/>
+                  </svg>
+                }
+              </div>
+            }
+          }
+          @if (orgMembers().length === 0) {
+            <div style="padding:.75rem;text-align:center;color:var(--color-text-secondary);font-size:.8rem">
+              No members found. Invite people to your org first.
+            </div>
+          }
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn-outline" (click)="showCreateGroup.set(false)">Cancel</button>
+        <button class="btn-primary" (click)="createGroup()"
+                [disabled]="!newGroupName().trim() || selectedGroupMembers().length === 0">
+          Create Group
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- ══ Create DM Modal ═══════════════════════════════════════ -->
+@if (showCreateDM()) {
+  <div class="modal-overlay" (click)="showCreateDM.set(false)">
+    <div class="modal-box" (click)="$event.stopPropagation()">
+      <div class="modal-hdr">
+        <span class="modal-ttl">New Direct Message</span>
+        <button class="modal-x" (click)="showCreateDM.set(false)">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="modal-lbl">Select a person</label>
+        <div class="pick-list">
+          @for (m of availableDMMembers; track m._id) {
+            <div class="pick-row" (click)="createDM(m._id)">
+              <div class="emp-av av1" style="width:28px;height:28px;font-size:.62rem">
+                {{ m.username.charAt(0).toUpperCase() }}
+              </div>
+              <div style="display:flex;flex-direction:column">
+                <span class="pick-name">{{ m.username }}</span>
+                <span style="font-size:.7rem;color:var(--color-text-secondary)">{{ m.email }}</span>
+              </div>
+            </div>
+          }
+          @if (availableDMMembers.length === 0) {
+            <div style="padding:.75rem;text-align:center;color:var(--color-text-secondary);font-size:.8rem">
+              No more members to message. You already have a DM with everyone.
+            </div>
+          }
+        </div>
+      </div>
+      <div class="modal-ftr">
+        <button class="btn-outline" (click)="showCreateDM.set(false)">Cancel</button>
+      </div>
+    </div>
+  </div>
+}

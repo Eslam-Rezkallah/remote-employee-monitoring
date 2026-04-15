@@ -1,0 +1,175 @@
+<div class="page">
+  <h1 class="page-title page-title-margin">Security</h1>
+
+  <div class="account-stack">
+
+    <!-- Active Sessions -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Active Sessions</div>
+          <div class="card-sub">Devices currently logged into your account</div>
+        </div>
+        <button class="btn-ghost btn-ghost-small" (click)="revokeAll()">Revoke all others</button>
+      </div>
+      <div class="session-stack">
+        @for (session of sessions(); track session.id) {
+          <div class="sec-session-row">
+            <div class="sess-icon">
+              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0H3"/>
+              </svg>
+            </div>
+            <div class="sess-info flex-1">
+              <span class="sess-device">{{ session.device }}</span>
+              <span class="sess-meta">{{ session.location }} · {{ session.lastActive }}</span>
+            </div>
+            @if (session.current) {
+              <span class="current-badge">Current</span>
+            } @else {
+              <button class="btn-ghost btn-ghost-small revoke-btn" (click)="revokeSession(session.id)">
+                Revoke
+              </button>
+            }
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════
+         Two-Factor Authentication — connected to backend
+         ══════════════════════════════════════════════════════ -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Two-Factor Authentication</div>
+          <div class="card-sub">Add an extra layer of security to your account</div>
+        </div>
+        @if (twoFAEnabled()) {
+          <span class="sec-enabled">Enabled ✓</span>
+        } @else {
+          <span style="font-size: 0.8rem; color: #6b7280">Disabled</span>
+        }
+      </div>
+
+      <!-- Success message -->
+      @if (twoFASuccess()) {
+        <div class="alert-success" style="margin-top: 0.75rem">✓ {{ twoFASuccess() }}</div>
+      }
+
+      <!-- Error message -->
+      @if (twoFAError()) {
+        <div class="alert-error" style="margin-top: 0.75rem">✕ {{ twoFAError() }}</div>
+      }
+
+      @if (twoFAEnabled()) {
+        <!-- Currently enabled → show disable button -->
+        <p class="card-sub" style="margin-top: .5rem">
+          Two-step verification is active. A code will be sent to your email on each login.
+        </p>
+        <button
+          class="btn-ghost btn-ghost-small"
+          style="margin-top: 0.75rem; color: #ef4444"
+          [disabled]="twoFALoading()"
+          (click)="disable2FA()"
+        >
+          {{ twoFALoading() ? 'Disabling…' : 'Disable 2FA' }}
+        </button>
+
+      } @else if (showOtpInput()) {
+        <!-- OTP verification step -->
+        <p class="card-sub" style="margin-top: .5rem">
+          Enter the 5-digit code sent to your email to enable 2FA.
+        </p>
+        <form [formGroup]="otpForm" (ngSubmit)="verify2FA()" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; align-items: flex-start">
+          <input
+            type="text"
+            formControlName="code"
+            class="input"
+            inputmode="numeric"
+            maxlength="5"
+            placeholder="5-digit code"
+            style="max-width: 160px; text-align: center; font-weight: 700; letter-spacing: 0.15em"
+            autocomplete="one-time-code"
+          />
+          <button type="submit" class="btn-primary" [disabled]="otpForm.invalid || twoFALoading()">
+            {{ twoFALoading() ? 'Verifying…' : 'Verify' }}
+          </button>
+          <button type="button" class="btn-ghost btn-ghost-small" (click)="showOtpInput.set(false)">
+            Cancel
+          </button>
+        </form>
+        @if (code.touched && code.errors?.['pattern']) {
+          <p class="field-error" style="margin-top: 0.25rem">Code must be exactly 5 digits.</p>
+        }
+
+      } @else {
+        <!-- Not enabled → show enable button -->
+        <p class="card-sub" style="margin-top: .5rem">
+          Enable two-step verification to require a code from your email on each login.
+        </p>
+        <button
+          class="btn-primary"
+          style="margin-top: 0.75rem"
+          [disabled]="twoFALoading()"
+          (click)="request2FA()"
+        >
+          {{ twoFALoading() ? 'Sending code…' : 'Enable 2FA' }}
+        </button>
+      }
+    </div>
+
+    <!-- Read Receipts -->
+    <div class="card card-spacing">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Read Receipts</div>
+          <div class="card-sub">Let others see when you've read their messages</div>
+        </div>
+        <button
+          class="btn-ghost btn-ghost-small"
+          (click)="toggleReadReceipts()"
+          [style.color]="readReceipts() ? '#22c55e' : '#6b7280'"
+        >
+          {{ readReceipts() ? 'On ✓' : 'Off' }}
+        </button>
+      </div>
+    </div>
+
+    <!-- Danger zone -->
+    <div class="card danger-card">
+      <div class="card-header">
+        <div>
+          <div class="card-title danger-title">Danger Zone</div>
+          <div class="card-sub">Irreversible actions — proceed with caution</div>
+        </div>
+      </div>
+      @if (!showDeleteConfirm()) {
+        <button class="btn-danger" (click)="showDeleteConfirm.set(true)">
+          Delete my account
+        </button>
+      } @else {
+        <div class="delete-confirm">
+          <p class="delete-warn">
+            ⚠️ This will permanently delete your account and all associated data.
+            Type <strong>DELETE</strong> to confirm.
+          </p>
+          <input
+            class="input"
+            type="text"
+            placeholder="Type DELETE to confirm"
+            [value]="deleteInput()"
+            (input)="deleteInput.set($any($event.target).value)"
+          />
+          <div class="delete-actions">
+            <button class="btn-ghost" (click)="showDeleteConfirm.set(false)">Cancel</button>
+            <button class="btn-danger" [disabled]="!canDelete" (click)="deleteAccount()">
+              Permanently delete
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+  </div>
+</div>

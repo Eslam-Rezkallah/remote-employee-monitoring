@@ -1,0 +1,93 @@
+<!-- Backdrop -->
+<div class="modal-backdrop" (click)="close.emit()"></div>
+
+<!-- Modal -->
+<div class="modal-panel" role="dialog" aria-modal="true">
+
+  <div class="modal-header">
+    <h2 class="modal-title">
+      <svg class="h-5 w-5" style="display: inline; vertical-align: -3px; margin-right: 6px; color: #6366f1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+      </svg>
+      Create Sprint
+    </h2>
+    <button class="modal-close" (click)="close.emit()">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate class="modal-body">
+
+    <!-- Sprint name -->
+    <div class="field-group">
+      <label class="field-label">Sprint Name <span class="required">*</span></label>
+      <input class="field-input" type="text" formControlName="name" placeholder="e.g. Sprint 5"/>
+      @if (name.touched && name.errors?.['required']) {
+        <p class="field-error">Sprint name is required.</p>
+      }
+      @if (name.touched && name.errors?.['minlength']) {
+        <p class="field-error">Name must be at least 2 characters.</p>
+      }
+    </div>
+
+    <!-- Dates row -->
+    <div class="two-col">
+      <div class="field-group">
+        <label class="field-label">Start Date <span class="required">*</span></label>
+        <input class="field-input" type="date" formControlName="startDate"/>
+        @if (form.get('startDate')?.touched && form.get('startDate')?.errors?.['required']) {
+          <p class="field-error">Start date is required.</p>
+        }
+      </div>
+      <div class="field-group">
+        <label class="field-label">End Date <span class="required">*</span></label>
+        <input class="field-input" type="date" formControlName="endDate"/>
+        @if (form.get('endDate')?.touched && form.get('endDate')?.errors?.['required']) {
+          <p class="field-error">End date is required.</p>
+        }
+      </div>
+    </div>
+
+    <!-- Goal -->
+    <div class="field-group">
+      <label class="field-label">Goal <span style="font-size: 11px; color: var(--color-text-tertiary, #6b7280); font-weight: 400">(optional)</span></label>
+      <textarea class="field-input field-textarea" formControlName="goal"
+                placeholder="What should this sprint achieve?" rows="2"></textarea>
+    </div>
+
+    <!-- Error message -->
+    @if (errorMsg()) {
+      <div style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 500">
+        {{ errorMsg() }}
+      </div>
+    }
+
+    <!-- Success message -->
+    @if (created()) {
+      <div style="background: #d1fae5; color: #065f46; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 500">
+        ✓ Sprint "{{ created() }}" created successfully!
+      </div>
+    }
+
+    <!-- Actions -->
+    <div class="modal-actions">
+      <button type="button" class="btn-ghost" (click)="close.emit()">Cancel</button>
+      <button type="submit" class="btn-primary" [disabled]="form.invalid || isSubmitting()">
+        @if (isSubmitting()) {
+          <span style="display: flex; align-items: center; gap: 6px">
+            <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+            </svg>
+            Creating…
+          </span>
+        } @else {
+          Create Sprint
+        }
+      </button>
+    </div>
+
+  </form>
+</div>

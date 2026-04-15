@@ -1,0 +1,123 @@
+/* ── Recent groups — FE-7.3 ───────────────────────────────── */
+.recent-group { margin-bottom: 24px; }
+
+.rg-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border-tertiary);
+}
+.rg-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.rg-count {
+  font-size: 11px;
+  background: var(--color-border-tertiary);
+  color: var(--color-text-tertiary);
+  padding: 1px 7px;
+  border-radius: 99px;
+}
+
+/* ── Recent items list ────────────────────────────────────── */
+.recent-items { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── FE-7.2 Recent card ───────────────────────────────────── */
+.recent-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: background 0.12s, border-color 0.12s;
+  cursor: pointer;
+}
+.recent-card:hover {
+  background: var(--color-background-secondary);
+  border-color: var(--color-border-tertiary);
+}
+
+.rc-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.rc-icon-task {
+  background: var(--color-background-secondary);
+  font-size: 15px;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-tertiary);
+}
+
+.rc-body {
+  flex: 1;
+  min-width: 0;
+}
+.rc-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+.rc-sub {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rc-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.rc-time {
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+.rc-status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+}
+.rc-type-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-weight: 500;
+}
+.rc-type-space { background: #6366f118; color: #6366f1; }
+.rc-type-task  { background: #f59e0b18; color: #f59e0b; }
+
+/* ── View all row — FE-7.4 ───────────────────────────────── */
+.view-all-row {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 24px;
+}
+
+/* ── Empty state ─────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}

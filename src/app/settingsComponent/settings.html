@@ -1,0 +1,37 @@
+<div class="page">
+  <h1 class="page-title">Settings</h1>
+  <div class="settings-layout">
+    <div class="card settings-nav">
+      <div class="sn-item active">General</div>
+      <div class="sn-item">Notifications</div>
+      <div class="sn-item">Privacy & Monitoring</div>
+      <div class="sn-item">Integrations</div>
+      <div class="sn-item">Billing</div>
+    </div>
+    <div>
+      <div class="card card-bottom-margin">
+        <div class="card-header"><div class="card-title">General Settings</div></div>
+        <div class="form-grid">
+          <div class="form-field"><label class="form-lbl">Company Name</label><input class="input" type="text" value="RemoteMS Corp" placeholder="Enter company name"/></div>
+          <div class="form-field"><label class="form-lbl" for="language">Default Language</label><select id="language" class="input"><option>English</option><option>Arabic</option><option>French</option></select></div>
+          <div class="form-field"><label class="form-lbl" for="timezone">Timezone</label><select id="timezone" class="input"><option>Africa/Cairo (GMT+3)</option><option>UTC</option></select></div>
+          <div class="form-field"><label class="form-lbl" for="dateFormat">Date Format</label><select id="dateFormat" class="input"><option>DD/MM/YYYY</option><option>MM/DD/YYYY</option></select></div>
+        </div>
+      </div>
+      <div class="card card-bottom-margin">
+        <div class="card-header"><div class="card-title">Monitoring Settings</div><span class="ai-chip">AI Active</span></div>
+        <div class="toggle-list">
+          <div class="toggle-row"><div><span class="tog-title">Screenshot Capture</span><span class="tog-sub">Auto-capture every 10 minutes</span></div><div class="toggle-on"></div></div>
+          <div class="toggle-row"><div><span class="tog-title">Idle Detection</span><span class="tog-sub">Alert after 15 minutes of inactivity</span></div><div class="toggle-on"></div></div>
+          <div class="toggle-row"><div><span class="tog-title">AI Anomaly Detection</span><span class="tog-sub">ML model scans activity patterns daily</span></div><div class="toggle-on"></div></div>
+          <div class="toggle-row"><div><span class="tog-title">Activity Clustering</span><span class="tog-sub">Group employees by performance automatically</span></div><div class="toggle-on"></div></div>
+          <div class="toggle-row"><div><span class="tog-title">Two-Step Verification (Global)</span><span class="tog-sub">Require 2FA for all users</span></div><div class="toggle-off"></div></div>
+        </div>
+      </div>
+      <div class="button-container">
+        <button class="btn-ghost">Cancel</button>
+        <button class="btn-primary">Save Changes</button>
+      </div>
+    </div>
+  </div>
+</div>

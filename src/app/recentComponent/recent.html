@@ -1,0 +1,101 @@
+<div class="page">
+
+  <!-- ── Header — FE-7.1 ── -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Recent</h1>
+      <p class="page-sub">{{ totalCount() }} items — spaces and tasks you've worked on</p>
+    </div>
+  </div>
+
+  <!-- ── Groups — FE-7.3 ── -->
+  @if (groups().length === 0) {
+    <div class="empty-state">
+      <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
+      </svg>
+      <p>No recent activity yet.</p>
+    </div>
+  }
+
+  @for (group of groups(); track group.label) {
+    <div class="recent-group">
+
+      <!-- Group header — FE-7.3 -->
+      <div class="rg-header">
+        <span class="rg-label">{{ group.label }}</span>
+        <span class="rg-count">{{ group.items.length }}</span>
+      </div>
+
+      <!-- Items — FE-7.2 -->
+      <div class="recent-items">
+        @for (item of group.items; track item.visitedAt) {
+
+          <!-- Space card -->
+          @if (isSpace(item)) {
+            <a class="recent-card" [routerLink]="['/dashboard/spaces', item.data.id]">
+              <div class="rc-icon" [style.background]="item.data.color + '18'">
+                {{ item.data.icon }}
+              </div>
+              <div class="rc-body">
+                <span class="rc-title">{{ item.data.name }}</span>
+                <span class="rc-sub">Space · {{ item.data.key }} · {{ item.data.members }} members</span>
+              </div>
+              <div class="rc-right">
+                <span class="rc-time">{{ timeAgo(item.visitedAt) }}</span>
+                <span class="rc-type-badge rc-type-space">Space</span>
+              </div>
+            </a>
+          }
+
+          <!-- Task card -->
+          @if (isTask(item)) {
+            <a class="recent-card" [routerLink]="['/dashboard/tasks', item.data.id]">
+              <div class="rc-icon rc-icon-task">
+                {{ workTypeIcon(item.data.workType) }}
+              </div>
+              <div class="rc-body">
+                <span class="rc-title">{{ item.data.title }}</span>
+                <span class="rc-sub">
+                  {{ item.data.sprint }} · {{ item.data.assignee }}
+                  · {{ item.data.logged }}h logged
+                </span>
+              </div>
+              <div class="rc-right">
+                <span class="rc-time">{{ timeAgo(item.visitedAt) }}</span>
+                <span class="rc-status-dot"
+                      [style.background]="statusColor(item.data.status)"
+                      [title]="statusLabel(item.data.status)">
+                </span>
+                <span class="rc-type-badge rc-type-task">Task</span>
+              </div>
+            </a>
+          }
+
+        }
+      </div>
+    </div>
+  }
+
+  <!-- FE-7.4 View all / collapse -->
+  @if (totalCount() > PREVIEW_COUNT) {
+    <div class="view-all-row">
+      @if (!showAll()) {
+        <button class="btn-ghost" (click)="showAll.set(true)">
+          View all {{ totalCount() }} recent items
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+          </svg>
+        </button>
+      } @else {
+        <button class="btn-ghost" (click)="showAll.set(false)">
+          Show less
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 15.75 7.5-7.5 7.5 7.5"/>
+          </svg>
+        </button>
+      }
+    </div>
+  }
+
+</div>

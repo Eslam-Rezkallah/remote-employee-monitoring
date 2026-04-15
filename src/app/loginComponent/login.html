@@ -1,0 +1,300 @@
+<div class="page-shell min-h-screen flex items-center justify-center px-4 py-12">
+  <div class="card w-full max-w-sm sm:max-w-md rounded-2xl p-8 sm:p-10">
+    <!-- ── Brand / Header ── -->
+    <div class="mb-8 text-center">
+      <div
+        class="brand-icon mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl shadow-lg"
+      >
+        <svg
+          class="h-7 w-7 text-white"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+          />
+        </svg>
+      </div>
+      <h1 class="heading text-2xl sm:text-3xl font-bold tracking-tight">Welcome back</h1>
+      <p class="subheading mt-1.5 text-sm">Sign in to continue to your account</p>
+    </div>
+
+    <!-- ── Auth Error Banner ── -->
+    @if (errorMessage) {
+      <div
+        role="alert"
+        class="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-5 text-sm"
+      >
+        <svg
+          class="h-4 w-4 shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+          />
+        </svg>
+        {{ errorMessage }}
+      </div>
+    }
+
+    <!-- ── Form ── -->
+    @if (!requires2FA) {
+      <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" novalidate class="space-y-5">
+        <!-- Email -->
+        <div>
+          <label for="email" class="field-label block text-sm font-medium mb-1.5">
+            Email address
+          </label>
+          <div class="relative">
+            <span
+              class="field-icon absolute inset-y-0 left-3 flex items-center pointer-events-none"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+                />
+              </svg>
+            </span>
+            <input
+              id="email"
+              type="email"
+              formControlName="email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              [class.is-invalid]="email.invalid && email.touched"
+              class="field-input w-full rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none"
+              aria-describedby="email-error"
+            />
+          </div>
+          @if (email.touched && email.errors) {
+            <div id="email-error" role="alert" class="mt-2 space-y-0.5">
+              @if (email.errors['required']) {
+                <p class="error-msg text-xs flex items-center gap-1">
+                  <svg class="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 4a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V5zm-.75 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+                    />
+                  </svg>
+                  Email is required.
+                </p>
+              }
+              @if (email.errors['email']) {
+                <p class="error-msg text-xs flex items-center gap-1">
+                  <svg class="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 4a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V5zm-.75 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+                    />
+                  </svg>
+                  Enter a valid email address.
+                </p>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Password -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="password" class="field-label block text-sm font-medium">Password</label>
+            <a
+              routerLink="/forget-password"
+              class="forgot-link text-xs font-medium transition-colors duration-150"
+            >
+              Forgot password?
+            </a>
+          </div>
+          <div class="relative">
+            <span
+              class="field-icon absolute inset-y-0 left-3 flex items-center pointer-events-none"
+            >
+              <svg
+                class="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"
+                />
+              </svg>
+            </span>
+            <input
+              id="password"
+              [type]="showPassword ? 'text' : 'password'"
+              formControlName="password"
+              autocomplete="current-password"
+              placeholder="••••••••"
+              [class.is-invalid]="password.invalid && password.touched"
+              class="field-input w-full rounded-xl py-2.5 pl-10 pr-11 text-sm outline-none"
+              aria-describedby="password-error"
+            />
+            <button
+              type="button"
+              (click)="togglePassword()"
+              [attr.aria-label]="showPassword ? 'Hide password' : 'Show password'"
+              class="toggle-btn absolute inset-y-0 right-3 flex items-center focus:outline-none"
+            >
+              @if (showPassword) {
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
+                  />
+                </svg>
+              } @else {
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                  />
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                  />
+                </svg>
+              }
+            </button>
+          </div>
+          @if (password.touched && password.errors) {
+            <div id="password-error" role="alert" class="mt-2 space-y-0.5">
+              @if (password.errors['required']) {
+                <p class="error-msg text-xs flex items-center gap-1">
+                  <svg class="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 4a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V5zm-.75 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+                    />
+                  </svg>
+                  Password is required.
+                </p>
+              }
+              @if (password.errors['minlength']) {
+                <p class="error-msg text-xs flex items-center gap-1">
+                  <svg class="h-3 w-3 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+                    <path
+                      d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm.75 4a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 1.5 0V5zm-.75 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"
+                    />
+                  </svg>
+                  Password must be at least 6 characters.
+                </p>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- Submit -->
+        <button
+          type="submit"
+          [disabled]="loginForm.invalid || isSubmitting"
+          class="submit-btn w-full rounded-xl py-2.5 text-sm font-semibold text-white transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none mt-2"
+          aria-live="polite"
+        >
+          @if (isSubmitting) {
+            <span class="flex items-center justify-center gap-2">
+              <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle
+                  class="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  stroke-width="4"
+                />
+                <path
+                  class="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"
+                />
+              </svg>
+              Signing in…
+            </span>
+          } @else {
+            Sign in
+          }
+        </button>
+
+        <!-- Divider -->
+        <div class="flex items-center my-6">
+          <div class="flex-grow border-t border-gray-300"></div>
+          <span class="mx-3 text-xs text-gray-500">OR</span>
+          <div class="flex-grow border-t border-gray-300"></div>
+        </div>
+
+        <!-- Google Button — rendered by Google SDK -->
+        <div #googleBtn class="w-full flex justify-center"></div>
+      </form>
+    }
+    @if (requires2FA) {
+      <form [formGroup]="otpForm" (ngSubmit)="onSubmitOTP()" class="space-y-5">
+        <div class="text-center">
+          <h2 class="text-xl font-semibold">Enter OTP</h2>
+          <p class="text-sm text-gray-500">Check your email for the code</p>
+        </div>
+
+        <div>
+          <input
+            type="text"
+            formControlName="code"
+            placeholder="Enter 5-digit code"
+            class="field-input w-full rounded-xl py-2.5 px-4 text-sm"
+          />
+        </div>
+
+        <button
+          type="submit"
+          [disabled]="otpForm.invalid || isSubmitting"
+          class="submit-btn w-full rounded-xl py-2.5 text-white"
+        >
+          Verify OTP
+        </button>
+
+        <button type="button" (click)="cancelOTP()" class="w-full text-sm text-gray-500">
+          Back to login
+        </button>
+      </form>
+    }
+
+    <!-- Footer -->
+    <p class="footer-text mt-7 text-center text-sm">
+      Don't have an account?
+      <a routerLink="/signup" class="footer-link font-semibold transition-colors duration-150">
+        Create one free
+      </a>
+    </p>
+  </div>
+</div>

@@ -1,0 +1,387 @@
+<div class="page">
+  <!-- Header -->
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Organization Settings</h1>
+      <p class="page-sub">Manage {{ orgName() || 'your organization' }}</p>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="os-tabs">
+    <button
+      class="os-tab"
+      [class.os-tab-active]="activeTab() === 'general'"
+      (click)="activeTab.set('general')"
+    >
+      <svg
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="1.75"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+        />
+      </svg>
+      General
+    </button>
+    <button
+      class="os-tab"
+      [class.os-tab-active]="activeTab() === 'members'"
+      (click)="activeTab.set('members')"
+    >
+      <svg
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="1.75"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+        />
+      </svg>
+      Members ({{ members().length }})
+    </button>
+    <button
+      class="os-tab"
+      [class.os-tab-active]="activeTab() === 'invitations'"
+      (click)="activeTab.set('invitations')"
+    >
+      <svg
+        class="h-4 w-4"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        stroke-width="1.75"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"
+        />
+      </svg>
+      Invite
+    </button>
+    @if (isOwner) {
+      <button
+        class="os-tab os-tab-danger"
+        [class.os-tab-active]="activeTab() === 'danger'"
+        (click)="activeTab.set('danger')"
+      >
+        <svg
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="1.75"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+          />
+        </svg>
+        Danger
+      </button>
+    }
+  </div>
+
+  <!-- ════════════════════════════════════════════════════
+       GENERAL TAB
+       ════════════════════════════════════════════════════ -->
+  @if (activeTab() === 'general') {
+    <div class="os-section">
+      <div class="card" style="padding: 1.5rem">
+        <h3 class="os-card-title">Organization Details</h3>
+        <form
+          [formGroup]="generalForm"
+          (ngSubmit)="saveGeneral()"
+          style="display: flex; flex-direction: column; gap: 1rem; margin-top: 1rem"
+        >
+          <div class="os-field">
+            <label class="os-label">Organization Name</label>
+            <input
+              class="os-input"
+              type="text"
+              formControlName="orgName"
+              placeholder="My Organization"
+            />
+          </div>
+          <div class="os-field">
+            <label class="os-label">Slug</label>
+            <input class="os-input" type="text" formControlName="slug" placeholder="my-org" />
+            <span class="os-hint"
+              >Used in URLs: rem.app/<strong>{{
+                generalForm.get('slug')?.value || 'my-org'
+              }}</strong></span
+            >
+          </div>
+          <div style="display: flex; gap: 0.5rem; align-items: center">
+            <button type="submit" class="btn-primary" [disabled]="generalForm.invalid">
+              @if (savedGeneral()) {
+                ✓ Saved
+              } @else {
+                Save Changes
+              }
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Join Code Card -->
+      @if (joinCode() && isAdmin) {
+        <div class="card" style="padding: 1.5rem; margin-top: 1rem">
+          <h3 class="os-card-title">Join Code</h3>
+          <p class="os-hint" style="margin-top: 0.25rem">
+            Share this code with people to join your organization.
+          </p>
+          <div class="os-join-code-wrap">
+            <span class="os-join-code">{{ joinCode() }}</span>
+            <button class="btn-ghost" style="font-size: 0.78rem" (click)="copyJoinCode()">
+              Copy
+            </button>
+          </div>
+          @if (joinCodeCopied()) {
+            <span style="font-size: 0.72rem; color: #10b981; margin-top: 0.25rem">Copied!</span>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ════════════════════════════════════════════════════
+       MEMBERS TAB
+       ════════════════════════════════════════════════════ -->
+  @if (activeTab() === 'members') {
+    <div class="os-section">
+      @if (loadingMembers()) {
+        <div
+          style="
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+            font-size: 0.85rem;
+          "
+        >
+          Loading members…
+        </div>
+      }
+
+      @if (!loadingMembers() && members().length === 0) {
+        <div
+          style="
+            text-align: center;
+            padding: 2rem;
+            color: var(--color-text-secondary);
+            font-size: 0.85rem;
+          "
+        >
+          No members yet. Invite people from the "Invite" tab.
+        </div>
+      }
+
+      @if (!loadingMembers() && members().length > 0) {
+        <div class="os-members-table">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Joined</th>
+                @if (isOwner) {
+                  <th style="width: 60px"></th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of members(); track m.userId) {
+                <tr>
+                  <td>
+                    <div style="display: flex; align-items: center; gap: 0.5rem">
+                      <div class="av av-32 av1">{{ m.fullName.charAt(0).toUpperCase() }}</div>
+                      <span style="font-weight: 500; font-size: 0.85rem">{{ m.fullName }}</span>
+                    </div>
+                  </td>
+                  <td style="font-size: 0.82rem; color: var(--color-text-secondary)">
+                    {{ m.email }}
+                  </td>
+                  <td>
+                    @if (m.role === 'owner') {
+                      <span class="os-role-badge os-role-owner">Owner</span>
+                    } @else if (isOwner) {
+                      <select
+                        class="os-role-select"
+                        [value]="m.role"
+                        (change)="updateRole(m.userId, $event)"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                      </select>
+                    } @else {
+                      <span class="os-role-badge" [class.os-role-admin]="m.role === 'admin'">
+                        {{ m.role | titlecase }}
+                      </span>
+                    }
+                  </td>
+                  <td style="font-size: 0.78rem; color: var(--color-text-secondary)">
+                    {{ m.joinedAt }}
+                  </td>
+                  @if (isOwner) {
+                    <td>
+                      @if (m.role !== 'owner') {
+                        <button
+                          class="os-remove-btn"
+                          (click)="removeMember(m.userId)"
+                          title="Remove member"
+                        >
+                          <svg
+                            class="h-3.5 w-3.5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          >
+                            <path
+                              stroke-linecap="round"
+                              stroke-linejoin="round"
+                              d="M6 18 18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ════════════════════════════════════════════════════
+       INVITATIONS TAB
+       ════════════════════════════════════════════════════ -->
+  @if (activeTab() === 'invitations') {
+    <div class="os-section">
+      <div class="card" style="padding: 1.5rem">
+        <h3 class="os-card-title">Invite a Team Member</h3>
+        <p class="os-hint" style="margin-top: 0.25rem">
+          Send an email invitation to join your organization.
+        </p>
+
+        <!-- Success -->
+        @if (inviteSuccess()) {
+          <div class="os-alert os-alert-success" style="margin-top: 0.75rem">
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+            </svg>
+            {{ inviteSuccess() }}
+          </div>
+        }
+
+        <!-- Error -->
+        @if (inviteError()) {
+          <div class="os-alert os-alert-error" style="margin-top: 0.75rem">
+            <svg
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 9v3.75m9.303 3.376c-.866 1.5-2.813 1.874-1.948 3.374H3.952c.866 1.5-.217-3.374-1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126Z"
+              />
+            </svg>
+            {{ inviteError() }}
+          </div>
+        }
+
+        <form [formGroup]="inviteForm" (ngSubmit)="sendInvite()" class="os-invite-form">
+          <div class="os-field">
+            <label class="os-label">Email address</label>
+            <input
+              class="os-input"
+              type="email"
+              formControlName="email"
+              placeholder="colleague@example.com"
+            />
+          </div>
+          <div class="os-field">
+            <label class="os-label">Role</label>
+            <select class="os-input" formControlName="role">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button
+            type="submit"
+            class="btn-primary"
+            [disabled]="inviteForm.invalid"
+            style="align-self: flex-start; margin-top: 0.5rem"
+          >
+            Send Invitation
+          </button>
+        </form>
+      </div>
+    </div>
+  }
+
+  <!-- ════════════════════════════════════════════════════
+       DANGER TAB
+       ════════════════════════════════════════════════════ -->
+  @if (activeTab() === 'danger' && isOwner) {
+    <div class="os-section">
+      <div class="card os-danger-card" style="padding: 1.5rem">
+        <h3 class="os-card-title" style="color: #dc2626">Danger Zone</h3>
+        <p class="os-hint" style="margin-top: 0.25rem">
+          Deleting the organization is permanent. All spaces, tasks, members, and data will be lost.
+        </p>
+
+        @if (!showDeleteOrg()) {
+          <button class="btn-danger" style="margin-top: 1rem" (click)="showDeleteOrg.set(true)">
+            Delete Organization
+          </button>
+        } @else {
+          <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.75rem">
+            <p style="font-size: 0.82rem; color: #dc2626; font-weight: 500">
+              Type <strong>DELETE</strong> to confirm permanent deletion.
+            </p>
+            <input
+              class="os-input"
+              type="text"
+              placeholder="Type DELETE"
+              [value]="deleteOrgInput()"
+              (input)="deleteOrgInput.set($any($event.target).value)"
+              style="max-width: 240px; border-color: #fecaca"
+            />
+            <div style="display: flex; gap: 0.5rem">
+              <button class="btn-ghost" (click)="showDeleteOrg.set(false)">Cancel</button>
+              <button class="btn-danger" [disabled]="!canDeleteOrg" (click)="deleteOrg()">
+                Permanently Delete
+              </button>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  }
+</div>

@@ -1,0 +1,38 @@
+:host {
+  display: contents;
+}
+
+.layout-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg-base);
+  transition: background .2s;
+}
+
+.layout-navbar {
+  flex-shrink: 0;
+  z-index: 40;
+}
+
+.layout-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.layout-sidebar {
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.layout-main {
+  flex: 1;
+  overflow-y: auto;
+  min-width: 0;
+  background: var(--bg-base);
+  transition: background .2s;
+}

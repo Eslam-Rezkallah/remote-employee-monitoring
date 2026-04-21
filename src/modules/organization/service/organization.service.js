@@ -70,8 +70,6 @@ export const getMyOrganizations = asyncHandler(async (req, res, next) => {
       select: "name slug logo ownerId createdAt",
     },
   })
-  .lean();
-
   const organizations = memberships
     .filter((m) => m.organizationId)
     .map((m) => ({

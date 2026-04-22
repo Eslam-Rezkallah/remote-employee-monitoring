@@ -11,7 +11,7 @@ import { getPagination } from "../../../utils/db/pagination.js";
 import { getChatNamespace } from "../../socket/socket.controller.js";
 import messageModel from "../../../DB/Model/message.model.js";
 import reactionModel from "../../../DB/Model/reaction.model.js";
-import *  as dbService from "../../../DB/db.service.js"; 
+import * as dbService from "../../../DB/db.service.js";
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -64,9 +64,9 @@ async function findSharedOrg(userIdA, userIdB) {
     model: memberModel,
     filter: {
       userId: userIdA,
-      isActive: true
+      isActive: true,
     },
-    select: "organizationId"
+    select: "organizationId",
   });
   const orgIdsA = new Set(orgsA.map((m) => m.organizationId.toString()));
 
@@ -74,9 +74,9 @@ async function findSharedOrg(userIdA, userIdB) {
     model: memberModel,
     filter: {
       userId: userIdB,
-      isActive: true
+      isActive: true,
     },
-    select: "organizationId"
+    select: "organizationId",
   });
 
   for (const m of orgsB) {
@@ -115,9 +115,9 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     model: userModel,
     filter: {
       _id: targetUserId,
-      isDeleted: false
+      isDeleted: false,
     },
-    select: "_id username"
+    select: "_id username",
   });
   if (!target) return next(new Error("Target user not found", { cause: 404 }));
 
@@ -159,7 +159,7 @@ export const createDirect = asyncHandler(async (req, res, next) => {
       admins: [senderId],
       createdBy: senderId,
       isPrivate: true,
-    }
+    },
   });
 
   const populated = await dbService.findOne({
@@ -167,9 +167,9 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     filter: { _id: room._id },
     populate: {
       path: "members",
-      select: "username email image"
+      select: "username email image",
     },
-    lean: true
+    lean: true,
   });
 
   broadcastRoomCreated(populated);
@@ -185,8 +185,15 @@ export const createDirect = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 
 export const createChannel = asyncHandler(async (req, res, next) => {
-  const { name, description, organizationId, teamId, projectId, isPrivate } =
-    req.body;
+  const {
+    name,
+    description,
+    organizationId,
+    teamId,
+    projectId,
+    isPrivate,
+    memberIds = [], // ✅ NEW
+  } = req.body;
   const userId = req.user._id;
 
   if (organizationId) {
@@ -210,7 +217,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
         _id: teamId,
         members: userId,
         isDeleted: false,
-      }
+      },
     });
     if (!team)
       return next(
@@ -226,9 +233,9 @@ export const createChannel = asyncHandler(async (req, res, next) => {
       model: projectModel,
       filter: {
         _id: projectId,
-        isDeleted: false
+        isDeleted: false,
       },
-      select: "manager organizationId"
+      select: "manager organizationId",
     });
     if (!project) return next(new Error("Project not found", { cause: 404 }));
 
@@ -241,7 +248,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
           organizationId: project.organizationId,
           userId,
           isActive: true,
-        }
+        },
       });
       isOrgAdmin = mem && ["owner", "admin"].includes(mem.role);
     }
@@ -255,21 +262,57 @@ export const createChannel = asyncHandler(async (req, res, next) => {
 
     if (!resolvedOrgId) resolvedOrgId = project.organizationId;
   }
-   const existingChannel = await dbService.findOne({
-     model: chatRoomModel,
-     filter: {
-       name,
-       organizationId: resolvedOrgId,
-       teamId: teamId || null,
-       projectId: projectId || null,
-       type: chatRoomTypes.channel,
-       isDeleted: false,
-     },
-   });
-  if (existingChannel) {
-    return  next( new Error("A channel with the same name already exists in this scope", { cause: 409 }) );
 
+  // ── Check for duplicate channel in same scope ───────────
+  const existingChannel = await dbService.findOne({
+    model: chatRoomModel,
+    filter: {
+      name,
+      organizationId: resolvedOrgId,
+      teamId: teamId || null,
+      projectId: projectId || null,
+      type: chatRoomTypes.channel,
+      isDeleted: false,
+    },
+  });
+  if (existingChannel) {
+    return next(
+      new Error("A channel with the same name already exists in this scope", {
+        cause: 409,
+      }),
+    );
   }
+
+  // ── ✅ NEW: Build initial members list ──────────────────
+  // Always include creator + any pre-selected members
+  const initialMembers = [
+    ...new Set([userId.toString(), ...memberIds.map((id) => id.toString())]),
+  ];
+
+  // ── ✅ NEW: Validate that all selected members belong to ─
+  //          the resolved organization (if scoped to one)
+  if (memberIds.length > 0 && resolvedOrgId) {
+    const validMembers = await dbService.find({
+      model: memberModel,
+      filter: {
+        organizationId: resolvedOrgId,
+        userId: { $in: memberIds },
+        isActive: true,
+      },
+      select: "userId",
+      lean: true,
+    });
+
+    if (validMembers.length !== memberIds.length) {
+      return next(
+        new Error(
+          "One or more selected members are not active members of this organization",
+          { cause: 400 },
+        ),
+      );
+    }
+  }
+
   const room = await dbService.create({
     model: chatRoomModel,
     data: {
@@ -279,11 +322,11 @@ export const createChannel = asyncHandler(async (req, res, next) => {
       organizationId: resolvedOrgId,
       teamId: teamId || null,
       projectId: projectId || null,
-      members: [userId],
+      members: initialMembers, // ✅ NEW: includes pre-selected members
       admins: [userId],
       createdBy: userId,
       isPrivate: isPrivate ?? false,
-    }
+    },
   });
 
   const populated = await dbService.findOne({
@@ -291,9 +334,9 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     filter: { _id: room._id },
     populate: {
       path: "members",
-      select: "username email image"
+      select: "username email image",
     },
-    lean: true
+    lean: true,
   });
 
   broadcastRoomCreated(populated);
@@ -317,9 +360,9 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
     filter: {
       _id: teamId,
       members: userId,
-      isDeleted: false
+      isDeleted: false,
     },
-    select: "members name organizationId"
+    select: "members name organizationId",
   });
   if (!team)
     return next(
@@ -332,7 +375,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
       type: chatRoomTypes.team,
       teamId,
       isDeleted: false,
-    }
+    },
   });
 
   if (room) {
@@ -354,7 +397,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
       admins: team.members,
       createdBy: userId,
       isPrivate: false,
-    }
+    },
   });
 
   const populated = await dbService.findOne({
@@ -362,9 +405,9 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
     filter: { _id: room._id },
     populate: {
       path: "members",
-      select: "username email image"
+      select: "username email image",
     },
-    lean: true
+    lean: true,
   });
 
   broadcastRoomCreated(populated);
@@ -399,7 +442,7 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
       type: chatRoomTypes.organization,
       organizationId,
       isDeleted: false,
-    }
+    },
   });
 
   if (room) {
@@ -413,7 +456,7 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
   const orgMembers = await dbService.find({
     model: memberModel,
     filter: { organizationId, isActive: true },
-    select: "userId"
+    select: "userId",
   });
   const memberIds = orgMembers.map((m) => m.userId);
 
@@ -427,7 +470,7 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
       admins: memberIds,
       createdBy: userId,
       isPrivate: false,
-    }
+    },
   });
 
   const populated = await dbService.findOne({
@@ -435,9 +478,9 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
     filter: { _id: room._id },
     populate: {
       path: "members",
-      select: "username email image"
+      select: "username email image",
     },
-    lean: true
+    lean: true,
   });
 
   broadcastRoomCreated(populated);
@@ -469,7 +512,7 @@ export const createGroup = asyncHandler(async (req, res, next) => {
       isActive: true,
     },
     select: "userId",
-    lean: true  
+    lean: true,
   });
 
   if (validMembers.length !== allMemberIds.length) {
@@ -491,7 +534,7 @@ export const createGroup = asyncHandler(async (req, res, next) => {
       admins: [userId],
       createdBy: userId,
       isPrivate: true,
-    }
+    },
   });
 
   const populated = await dbService.findOne({
@@ -499,9 +542,9 @@ export const createGroup = asyncHandler(async (req, res, next) => {
     filter: { _id: room._id },
     populate: {
       path: "members",
-      select: "username email image"
+      select: "username email image",
     },
-    lean: true
+    lean: true,
   });
 
   broadcastRoomCreated(populated);
@@ -514,17 +557,17 @@ export const createGroup = asyncHandler(async (req, res, next) => {
 
 // GET /chat/rooms  — UPDATED: embeds unread counts per room
 // ─────────────────────────────────────────────────────────────
- 
+
 export const listChatRooms = asyncHandler(async (req, res, next) => {
   const userId = req.user._id;
   const { organizationId, type } = req.query;
- 
+
   const { page, limit, skip } = getPagination(req.query);
- 
+
   const filter = { members: userId, isDeleted: false };
   if (organizationId) filter.organizationId = organizationId;
   if (type) filter.type = type;
- 
+
   const [rooms, total] = await Promise.all([
     chatRoomModel
       .find(filter)
@@ -541,10 +584,10 @@ export const listChatRooms = asyncHandler(async (req, res, next) => {
       .lean(),
     chatRoomModel.countDocuments(filter),
   ]);
- 
+
   // ── Compute unread counts for all returned rooms in one query ──
   const roomIds = rooms.map((r) => r._id);
- 
+
   const unreadAgg = await messageModel.aggregate([
     {
       $match: {
@@ -562,19 +605,19 @@ export const listChatRooms = asyncHandler(async (req, res, next) => {
       },
     },
   ]);
- 
+
   const unreadMap = new Map(
     unreadAgg.map((item) => [item._id.toString(), item.count]),
   );
- 
+
   // ── Embed unreadCount into each room object ──
   const roomsWithUnread = rooms.map((room) => ({
     ...room,
     unreadCount: unreadMap.get(room._id.toString()) || 0,
   }));
- 
+
   const totalUnread = unreadAgg.reduce((sum, item) => sum + item.count, 0);
- 
+
   return successResponse({
     res,
     data: { rooms: roomsWithUnread, total, totalUnread, page, limit },
@@ -631,9 +674,9 @@ export const updateRoom = asyncHandler(async (req, res, next) => {
   const updated = await dbService.findOneAndUpdate({
     model: chatRoomModel,
     filter: { _id: roomId },
-    data:update,
+    data: update,
     options: { new: true },
-});
+  });
 
   return successResponse({
     res,

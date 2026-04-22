@@ -19,6 +19,9 @@ export const createDirect = joi
 
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/channel
+// ✅ NEW: optional memberIds — allows admin/owner to pre-select
+//        members when creating the channel (works for both
+//        public and private channels).
 // ─────────────────────────────────────────────────────────────
 export const createChannel = joi
   .object({
@@ -28,11 +31,15 @@ export const createChannel = joi
     teamId: optionalId,
     projectId: optionalId,
     isPrivate: joi.boolean().default(false),
+    memberIds: joi
+      .array()
+      .items(joi.string().custom(isValidObjectId))
+      .unique()
+      .optional(),
   })
   .or("organizationId", "teamId", "projectId") // at least one scope required
   .required();
 
-// ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
 // POST /chat/rooms/team
 // ─────────────────────────────────────────────────────────────

@@ -69,13 +69,14 @@ export const getMyOrganizations = asyncHandler(async (req, res, next) => {
       match: { isDeleted: false, isActive: true },
       select: "name slug logo ownerId createdAt",
     },
-  })
+  }) 
   const organizations = memberships
     .filter((m) => m.organizationId)
     .map((m) => ({
       ...m.organizationId,
       memberRole: m.role,
       joinedAt: m.joinedAt,
+    
     }));
 
   return successResponse({ res, data: { organizations } });

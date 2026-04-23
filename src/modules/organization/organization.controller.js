@@ -20,8 +20,17 @@ const router = Router();
 // ORG CRUD
 // ─────────────────────────────────────────────────────────────
 
+// GET /org/:orgId  — get org details + member count + current user role
+router.get(
+  "/:orgId",
+  authentication(),
+  validation(validators.orgIdParam),
+  orgService.getOrg
+);
+
 // GET /org/me  — all orgs the logged-in user belongs to
 router.get("/me", authentication(), orgService.getMyOrganizations);
+
 
 // POST /org  — create a new org
 router.post(
@@ -32,13 +41,7 @@ router.post(
   orgService.createOrg
 );
 
-// GET /org/:orgId  — get org details + member count + current user role
-router.get(
-  "/:orgId",
-  authentication(),
-  validation(validators.orgIdParam),
-  orgService.getOrg
-);
+
 
 // PATCH /org/:orgId  — update org info (owner/admin)
 router.patch(

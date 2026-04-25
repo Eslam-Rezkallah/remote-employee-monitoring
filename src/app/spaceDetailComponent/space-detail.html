@@ -401,7 +401,7 @@
                     </div>
                   </div>
                   <div class="tl-right">
-                    <span class="tl-dates">{{ task.startDate }} → {{ task.dueDate }}</span>
+                    <span class="tl-dates">{{ task.startDate ? (task.startDate | date:'MMM d') : '' }} → {{ task.dueDate ? (task.dueDate | date:'MMM d') : '' }}</span>
                     <div class="tl-assignee-av" [title]="task.assignee">
                       {{ task.assigneeInitial }}
                     </div>
@@ -514,7 +514,7 @@
                       [style.background]="priorityColor(task.priority)"
                       [title]="task.priority | titlecase"
                     ></span>
-                    <span class="bl-due">{{ task.dueDate }}</span>
+                    <span class="bl-due">{{ task.dueDate ? (task.dueDate | date:'MMM d') : '' }}</span>
                     <div
                       class="bl-av"
                       [title]="task.assignee"
@@ -609,7 +609,7 @@
                       >{{ task.priority | titlecase }}</span
                     >
                     <span class="sdk-type">{{ workTypeIcon(task.workType) }}</span>
-                    <span class="sdk-due">{{ task.dueDate }}</span>
+                    <span class="sdk-due">{{ task.dueDate ? (task.dueDate | date:'MMM d') : '' }}</span>
                   </div>
                   <span class="sdk-title" [class.sdk-title-done]="task.status === 'done'">{{
                     task.title

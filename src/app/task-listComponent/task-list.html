@@ -1,4 +1,35 @@
 <div class="page">
+  <!-- Loading -->
+  @if (loading()) {
+    <div style="text-align: center; padding: 3rem; color: var(--color-text-secondary)">
+      <svg
+        class="h-8 w-8 animate-spin"
+        style="margin: auto; display: block"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
+      </svg>
+    </div>
+  }
+
+  <!-- Error -->
+  @if (error()) {
+    <div
+      style="
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      "
+    >
+      {{ error() }}
+    </div>
+  }
 
   <!-- ── Header ── -->
   <div class="page-header">
@@ -11,13 +42,14 @@
       </p>
     </div>
     <div class="header-actions">
-
       <!-- Sprint selector -->
       <div class="sprint-selector">
         @for (s of allSprints(); track s) {
-          <button class="sprint-tab"
-                  [class.active]="s === currentSprint()"
-                  (click)="activeSprint.set(s)">
+          <button
+            class="sprint-tab"
+            [class.active]="s === currentSprint()"
+            (click)="activeSprint.set(s)"
+          >
             {{ s }}
           </button>
         }
@@ -26,30 +58,68 @@
       <!-- FE-5.4 New Sprint button -->
       <button class="btn-outline" (click)="createSprintOpen.set(true)">
         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/>
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+          />
         </svg>
         New Sprint
       </button>
 
       <!-- View toggle -->
       <div class="view-toggle">
-        <button class="vt-btn" [class.active]="viewMode()==='board'" (click)="viewMode.set('board')">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"/>
+        <button
+          class="vt-btn"
+          [class.active]="viewMode() === 'board'"
+          (click)="viewMode.set('board')"
+        >
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z"
+            />
           </svg>
           Board
         </button>
-        <button class="vt-btn" [class.active]="viewMode()==='list'" (click)="viewMode.set('list')">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+        <button
+          class="vt-btn"
+          [class.active]="viewMode() === 'list'"
+          (click)="viewMode.set('list')"
+        >
+          <svg
+            class="h-4 w-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"
+            />
           </svg>
           List
         </button>
       </div>
 
       <button class="btn-primary" (click)="createTaskOpen.set(true)">
-        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+        <svg
+          class="h-4 w-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
         New Task
       </button>
@@ -61,7 +131,9 @@
     <div class="sprint-progress-bar">
       <div class="sprint-progress-fill" [style.width]="sprintStats().pct + '%'"></div>
     </div>
-    <span class="sprint-progress-label">{{ sprintStats().done }} / {{ sprintStats().total }} done</span>
+    <span class="sprint-progress-label"
+      >{{ sprintStats().done }} / {{ sprintStats().total }} done</span
+    >
   </div>
 
   <!-- ════════════════════════════════════════════════════════════
@@ -70,12 +142,13 @@
   @if (viewMode() === 'board') {
     <div class="kanban">
       @for (col of columns; track col.status) {
-        <div class="k-col"
-             [class.drag-over]="dragOverCol() === col.status"
-             (dragover)="onDragOver(col.status, $event)"
-             (dragleave)="onDragLeave()"
-             (drop)="onDrop(col.status, $event)">
-
+        <div
+          class="k-col"
+          [class.drag-over]="dragOverCol() === col.status"
+          (dragover)="onDragOver(col.status, $event)"
+          (dragleave)="onDragLeave()"
+          (drop)="onDrop(col.status, $event)"
+        >
           <div class="k-header" [ngClass]="col.colorClass">
             <span class="k-dot" [style.background]="statusColor(col.status)"></span>
             <span class="k-flex">{{ col.label }}</span>
@@ -83,31 +156,53 @@
           </div>
 
           @for (task of getColTasks(col.status); track task.id) {
-            <div class="k-card"
-                 [class.is-prog]="task.status === 'inprogress'"
-                 [class.is-done]="task.status === 'done'"
-                 [class.dragging]="draggedTaskId() === task.id"
-                 draggable="true"
-                 (dragstart)="onDragStart(task.id, $event)"
-                 (dragend)="onDragEnd($event)">
-
+            <div
+              class="k-card"
+              [class.is-prog]="task.status === 'inprogress'"
+              [class.is-done]="task.status === 'done'"
+              [class.dragging]="draggedTaskId() === task.id"
+              draggable="true"
+              (dragstart)="onDragStart(task.id, $event)"
+              (dragend)="onDragEnd($event)"
+            >
               <div class="kc-top">
-                <span class="badge" [style.background]="priorityColor(task.priority) + '18'"
-                      [style.color]="priorityColor(task.priority)">
+                <span
+                  class="badge"
+                  [style.background]="priorityColor(task.priority) + '18'"
+                  [style.color]="priorityColor(task.priority)"
+                >
                   {{ task.priority | titlecase }}
                 </span>
-                <span class="kc-type-icon" [title]="task.workType">{{ workTypeIcon(task.workType) }}</span>
+                <span class="kc-type-icon" [title]="task.workType">{{
+                  workTypeIcon(task.workType)
+                }}</span>
                 <span class="kc-due" [class.kc-due-done]="task.status === 'done'">
                   {{ task.dueDate }}{{ task.status === 'done' ? ' ✓' : '' }}
                 </span>
-                <button class="kc-edit-btn" (click)="openQuickEdit(task.id, $event)" title="Quick edit">
-                  <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"/>
+                <button
+                  class="kc-edit-btn"
+                  (click)="openQuickEdit(task.id, $event)"
+                  title="Quick edit"
+                >
+                  <svg
+                    class="h-3 w-3"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    stroke-width="2.5"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
+                    />
                   </svg>
                 </button>
               </div>
 
-              <span class="kc-title" [class.kc-title-done]="task.status === 'done'">{{ task.title }}</span>
+              <span class="kc-title" [class.kc-title-done]="task.status === 'done'">{{
+                task.title
+              }}</span>
 
               @if (task.status === 'inprogress' && task.progress > 0) {
                 <div class="kc-prog">
@@ -141,10 +236,14 @@
                   <div class="qe-title">Move to</div>
                   <div class="qe-status-btns">
                     @for (col2 of columns; track col2.status) {
-                      <button class="qe-status-btn"
-                              [class.active]="task.status === col2.status"
-                              [style.border-color]="task.status === col2.status ? statusColor(col2.status) : ''"
-                              (click)="taskService.updateStatus(task.id, col2.status); closeQuickEdit()">
+                      <button
+                        class="qe-status-btn"
+                        [class.active]="task.status === col2.status"
+                        [style.border-color]="
+                          task.status === col2.status ? statusColor(col2.status) : ''
+                        "
+                        (click)="taskService.updateStatus(task.id, col2.status); closeQuickEdit()"
+                      >
                         <span class="qe-dot" [style.background]="statusColor(col2.status)"></span>
                         {{ col2.label }}
                       </button>
@@ -155,14 +254,12 @@
                   </a>
                 </div>
               }
-
             </div>
           }
 
           @if (getColTasks(col.status).length === 0) {
             <div class="k-empty"><span>Drop tasks here</span></div>
           }
-
         </div>
       }
     </div>
@@ -191,18 +288,25 @@
             }
           </div>
           <div class="lr-assignee">
-            <div class="av av-26 av-icon" [style.background]="task.assigneeColor">{{ task.assigneeInitial }}</div>
+            <div class="av av-26 av-icon" [style.background]="task.assigneeColor">
+              {{ task.assigneeInitial }}
+            </div>
             <span class="lr-name">{{ task.assignee }}</span>
           </div>
-          <span class="lr-priority"
-                [style.background]="priorityColor(task.priority) + '18'"
-                [style.color]="priorityColor(task.priority)">
+          <span
+            class="lr-priority"
+            [style.background]="priorityColor(task.priority) + '18'"
+            [style.color]="priorityColor(task.priority)"
+          >
             {{ task.priority | titlecase }}
           </span>
-          <button class="lr-status" (click)="cycleStatus(task)"
-                  [style.background]="statusColor(task.status) + '18'"
-                  [style.color]="statusColor(task.status)"
-                  title="Click to advance status">
+          <button
+            class="lr-status"
+            (click)="cycleStatus(task)"
+            [style.background]="statusColor(task.status) + '18'"
+            [style.color]="statusColor(task.status)"
+            title="Click to advance status"
+          >
             {{ statusLabel(task.status) }}
           </button>
           <span class="lr-due">{{ task.dueDate }}</span>
@@ -211,11 +315,9 @@
       }
     </div>
   }
-
 </div>
 
 <!-- Create task modal -->
-
 
 <!-- FE-5.4 Create sprint modal -->
 @if (createSprintOpen()) {

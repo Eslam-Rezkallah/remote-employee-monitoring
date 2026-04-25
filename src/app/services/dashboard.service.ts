@@ -3,18 +3,6 @@ import { HttpClient } from '@angular/common/http';
 import { AuthService, BASE } from './auth.service';
 import { firstValueFrom } from 'rxjs';
 
-/**
- * Dashboard service — connects to real backend endpoints.
- *
- * Backend endpoints used:
- *   GET /me/tasks/assigned?orgId=…         → my tasks
- *   GET /stars?orgId=…                     → starred items
- *   GET /notifications?limit=…             → notifications
- *   GET /org/:orgId/spaces/:spaceId/…      → metrics (per-space)
- *
- * NOTE: There is NO global /metrics endpoint. KPIs on the dashboard
- *       home page are computed client-side from task data.
- */
 @Injectable({ providedIn: 'root' })
 export class DashboardService {
   private http = inject(HttpClient);
@@ -24,108 +12,171 @@ export class DashboardService {
     return this.auth.currentUser()?.orgId ?? '';
   }
 
-  // ── My Tasks ────────────────────────────────────────────
+  // ── My Assigned Tasks ────────────────────────────────────
   // Backend: GET /me/tasks/assigned?orgId=…
-  // Returns { message, data: [ task, … ] }
+  // Response: { data: { items: [...], total, page, limit } }
   async getMyTasks(): Promise<{ message: string; data: any[] }> {
-    const raw = await firstValueFrom(
-      this.http.get<{ message: string; data: any }>(`${BASE}/me/tasks/assigned`, {
-        params: { orgId: this.orgId },
-      }),
-    );
+    if (!this.orgId) return { message: 'no org', data: [] };
 
-    // 🔥 حل المشكلة
-    const tasks = Array.isArray(raw.data) ? raw.data : raw.data?.tasks || raw.data?.data || [];
+    try {
+      const raw = await firstValueFrom(
+        this.http.get<{ message: string; data: any }>(
+          `${BASE}/me/tasks/assigned`,
+          { params: { orgId: this.orgId, limit: '100' } }
+        ),
+      );
 
-    const mapped = tasks.map((t: any) => this.mapTask(t));
+      // ✅ الباك بيرجع { data: { items: [...], total } }
+      const items = raw.data?.items ?? raw.data ?? [];
+      const tasks = Array.isArray(items) ? items : [];
 
-    return { message: raw.message, data: mapped };
+      return {
+        message: raw.message,
+        data: tasks.map((t: any) => this.mapTask(t)),
+      };
+    } catch (err: any) {
+      console.error('[DashboardService] getMyTasks error:', err?.error ?? err);
+      return { message: 'error', data: [] };
+    }
   }
 
-  // ── Starred ─────────────────────────────────────────────
-  // Backend: GET /stars?orgId=…
+  // ── Worked On Tasks ──────────────────────────────────────
+  // Backend: GET /me/tasks/worked-on?orgId=…
+  // Response: { data: { items: [...], since, meta } }
+  async getWorkedOnTasks(): Promise<{ message: string; data: any[] }> {
+    if (!this.orgId) return { message: 'no org', data: [] };
+
+    try {
+      const raw = await firstValueFrom(
+        this.http.get<{ message: string; data: any }>(
+          `${BASE}/me/tasks/worked-on`,
+          { params: { orgId: this.orgId, limit: '50' } }
+        ),
+      );
+
+      const items = raw.data?.items ?? raw.data ?? [];
+      const tasks = Array.isArray(items) ? items : [];
+
+      return {
+        message: raw.message,
+        data: tasks.map((t: any) => this.mapTask(t)),
+      };
+    } catch (err: any) {
+      console.error('[DashboardService] getWorkedOnTasks error:', err?.error ?? err);
+      return { message: 'error', data: [] };
+    }
+  }
+
+  // ── Team Tasks ───────────────────────────────────────────
+  // Backend: GET /me/tasks/team?orgId=…
+  async getTeamTasks(): Promise<{ message: string; data: any[] }> {
+    if (!this.orgId) return { message: 'no org', data: [] };
+
+    try {
+      const raw = await firstValueFrom(
+        this.http.get<{ message: string; data: any }>(
+          `${BASE}/me/tasks/team`,
+          { params: { orgId: this.orgId, limit: '100' } }
+        ),
+      );
+
+      const items = raw.data?.items ?? raw.data ?? [];
+      const tasks = Array.isArray(items) ? items : [];
+
+      return {
+        message: raw.message,
+        data: tasks.map((t: any) => this.mapTask(t)),
+      };
+    } catch (err: any) {
+      console.error('[DashboardService] getTeamTasks error:', err?.error ?? err);
+      return { message: 'error', data: [] };
+    }
+  }
+
+  // ── Starred ──────────────────────────────────────────────
   async getStarred(): Promise<{ message: string; data: any[] }> {
-    return await firstValueFrom(
-      this.http.get<{ message: string; data: any[] }>(`${BASE}/stars`, {
-        params: { orgId: this.orgId },
-      }),
-    );
+    if (!this.orgId) return { message: 'no org', data: [] };
+    try {
+      return await firstValueFrom(
+        this.http.get<{ message: string; data: any[] }>(
+          `${BASE}/stars`,
+          { params: { orgId: this.orgId } }
+        ),
+      );
+    } catch {
+      return { message: 'error', data: [] };
+    }
   }
 
-  // ── Notifications ───────────────────────────────────────
-  // Backend: GET /notifications?limit=…
+  // ── Notifications ────────────────────────────────────────
   async getNotifications(): Promise<{ message: string; data: any }> {
-    return await firstValueFrom(
-      this.http.get<{ message: string; data: any }>(`${BASE}/notifications`, {
-        params: { limit: '50' },
-      }),
-    );
-  }
-
-  // ── Metrics (no global endpoint — returns null) ─────────
-  // KPIs are computed from tasks in the dashboard-home component.
-  // This method exists only for backward compatibility.
-  async getMetrics(): Promise<{ message: string; data: any }> {
-    // No global /metrics endpoint exists.
-    // Return empty shell so callers don't crash.
-    return { message: 'ok', data: null };
-  }
-
-  // ── Reports (kept for backward compat — use ReportsService instead)
-  async getReports(): Promise<{ message: string; data: any }> {
-    return { message: 'ok', data: null };
+    try {
+      return await firstValueFrom(
+        this.http.get<{ message: string; data: any }>(
+          `${BASE}/notifications`,
+          { params: { limit: '50' } }
+        ),
+      );
+    } catch {
+      return { message: 'error', data: null };
+    }
   }
 
   // ── Task mapping: backend → frontend ────────────────────
-  private mapTask(t: any): any {
-    // Backend type → frontend workType
+  // ✅ الباك بيرجع:
+  // { _id, title, type, status, priority, assigneeId: {_id, username}, sprintId, dueDate }
+  mapTask(t: any): any {
     const typeMap: Record<string, string> = {
-      Task: 'task',
-      Bug: 'bug',
-      Story: 'feature',
-      Epic: 'epic',
+      Task: 'task', Bug: 'bug', Story: 'feature', Epic: 'epic',
     };
-    // Backend status → frontend status
     const statusMap: Record<string, string> = {
-      Todo: 'todo',
-      InProgress: 'inprogress',
-      Done: 'done',
+      Todo: 'todo', InProgress: 'inprogress', Done: 'done',
     };
-    // Backend priority → frontend priority
     const prioMap: Record<string, string> = {
-      Urgent: 'highest',
-      High: 'high',
-      Medium: 'medium',
-      Low: 'low',
+      Urgent: 'highest', High: 'high', Medium: 'medium', Low: 'low',
     };
 
-    const assigneeName = t.assigneeId?.username ?? t.assigneeId?.fullName ?? t.assignee ?? '';
+    // assigneeId قد يكون object أو string
+    const assigneeObj = t.assigneeId;
+    const assigneeName =
+      typeof assigneeObj === 'object' && assigneeObj !== null
+        ? (assigneeObj.username ?? assigneeObj.fullName ?? '')
+        : '';
+    const assigneeId =
+      typeof assigneeObj === 'object' && assigneeObj !== null
+        ? assigneeObj._id
+        : assigneeObj ?? null;
 
-    const sprintName = t.sprintId?.name ?? t.sprint ?? '';
+    const sprintName =
+      typeof t.sprintId === 'object' && t.sprintId !== null
+        ? t.sprintId.name ?? ''
+        : '';
 
     return {
-      id: t._id ?? t.id,
-      title: t.title ?? '',
-      description: t.description ?? '',
-      workType: typeMap[t.type] ?? t.workType ?? 'task',
-      status: statusMap[t.status] ?? t.status?.toLowerCase() ?? 'todo',
-      priority: prioMap[t.priority] ?? t.priority?.toLowerCase() ?? 'medium',
-      assignee: assigneeName,
+      id:              t._id ?? t.id,
+      _id:             t._id ?? t.id,
+      title:           t.title ?? '',
+      description:     t.description ?? '',
+      workType:        typeMap[t.type] ?? 'task',
+      status:          statusMap[t.status] ?? t.status?.toLowerCase() ?? 'todo',
+      priority:        prioMap[t.priority] ?? t.priority?.toLowerCase() ?? 'medium',
+      assigneeId:      assigneeId,
+      assignee:        assigneeName,
       assigneeInitial: (assigneeName || '?').charAt(0).toUpperCase(),
-      assigneeColor: '#6366f1',
-      reporter: t.reporterId?.username ?? t.reporter ?? '',
-      sprint: sprintName,
-      spaceId: t.spaceId?._id ?? t.spaceId ?? '',
-      dueDate: t.dueDate
+      assigneeColor:   '#6366f1',
+      reporterId:      t.reporterId?._id ?? t.reporterId ?? null,
+      sprint:          sprintName,
+      spaceId:         t.spaceId?._id ?? t.spaceId ?? '',
+      dueDate:         t.dueDate
         ? new Date(t.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
         : '',
-      startDate: t.startDate ?? '',
-      estimated: t.estimatedTime ?? t.estimated ?? 0,
-      logged: t.loggedTime ?? t.logged ?? 0,
-      progress: t.progress ?? 0,
-      labels: t.labels ?? [],
-      createdAt: t.createdAt,
-      updatedAt: t.updatedAt,
+      startDate:       t.startDate ?? '',
+      logged:          0, // الباك مش بيرجع logged time في assigned tasks
+      progress:        0,
+      labels:          t.labels ?? [],
+      points:          t.points ?? 0,
+      createdAt:       t.createdAt,
+      updatedAt:       t.updatedAt,
     };
   }
 }

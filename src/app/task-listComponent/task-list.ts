@@ -1,9 +1,10 @@
-import { Component, inject, signal, computed, input } from '@angular/core';
+import { Component, inject, signal, computed, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { TaskService, Task, TaskStatus } from '../services/task.service';
-import { CreateTaskComponent } from '../createTaskComponent/create-task';
+import { SpaceService } from '../services/space.service';
 import { CreateSprintComponent } from '../createSprintComponent/create-sprint';
+
 type ViewMode = 'board' | 'list';
 
 @Component({
@@ -13,34 +14,63 @@ type ViewMode = 'board' | 'list';
   templateUrl: './task-list.html',
   styleUrls: ['../dark-theme.css', '../../styles.css', './task-list.css'],
 })
-export class TaskListComponent {
-  spaceId = input.required<string>();
-  
-  taskService = inject(TaskService);
+export class TaskListComponent implements OnInit {
+  taskService  = inject(TaskService);
+  spaceService = inject(SpaceService);
 
   viewMode         = signal<ViewMode>('board');
   createTaskOpen   = signal(false);
   createSprintOpen = signal(false);
+  loading          = signal(false);
+  error            = signal('');
 
+  // ✅ FIX: بنستخدم أول space موجود لو مفيش spaceId في الـ route
+  private get firstSpaceId(): string {
+    return this.spaceService.spaces()[0]?.id ?? '';
+  }
+
+  async ngOnInit() {
+    // بنستنى الـ spaces تتحمل الأول
+    if (this.spaceService.spaces().length === 0) {
+      await this.spaceService.loadSpaces();
+    }
+
+    const spaceId = this.firstSpaceId;
+    if (spaceId) {
+      this.loading.set(true);
+      try {
+        await this.taskService.loadTasks(spaceId);
+      } catch (err: any) {
+        this.error.set(err?.error?.message || 'Failed to load tasks');
+      } finally {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  // ── Sprints ───────────────────────────────────────────────
   allSprints = computed(() => {
-    const all = this.taskService.tasks().map(t => t.sprint);
+    const all = this.taskService.tasks().map(t => t.sprint).filter(Boolean);
     return [...new Set(all)].sort();
   });
+
   activeSprint = signal<string>('');
 
   currentSprint = computed(() => {
     if (this.activeSprint()) return this.activeSprint();
-    return this.allSprints()[this.allSprints().length - 1] ?? '';
+    const sprints = this.allSprints();
+    return sprints[sprints.length - 1] ?? 'Backlog';
   });
 
-  sprintTasks = computed(() =>
-    this.taskService.tasks().filter(t => t.sprint === this.currentSprint())
-  );
-
-  todoTasks       = computed(() => this.sprintTasks().filter(t => t.status === 'todo'));
-  inProgressTasks = computed(() => this.sprintTasks().filter(t => t.status === 'inprogress'));
-  inReviewTasks   = computed(() => this.sprintTasks().filter(t => t.status === 'inreview'));
-  doneTasks       = computed(() => this.sprintTasks().filter(t => t.status === 'done'));
+  sprintTasks = computed(() => {
+    const sprint = this.currentSprint();
+    const tasks  = this.taskService.tasks();
+    // لو مفيش sprints، بنعرض كل الـ tasks
+    if (sprint === 'Backlog' || this.allSprints().length === 0) {
+      return tasks;
+    }
+    return tasks.filter(t => t.sprint === sprint);
+  });
 
   sprintStats = computed(() => {
     const tasks = this.sprintTasks();
@@ -49,6 +79,7 @@ export class TaskListComponent {
     return { total, done, pct: total ? Math.round(done / total * 100) : 0 };
   });
 
+  // ── Quick Edit ────────────────────────────────────────────
   editingTaskId = signal<string | null>(null);
 
   openQuickEdit(id: string, event: MouseEvent) {
@@ -57,16 +88,15 @@ export class TaskListComponent {
   }
   closeQuickEdit() { this.editingTaskId.set(null); }
 
+  // ── Drag & Drop ───────────────────────────────────────────
   draggedTaskId = signal<string | null>(null);
   dragOverCol   = signal<TaskStatus | null>(null);
 
   onDragStart(taskId: string, event: DragEvent) {
     this.draggedTaskId.set(taskId);
     event.dataTransfer?.setData('text/plain', taskId);
-    (event.target as HTMLElement).classList.add('dragging');
   }
   onDragEnd(event: DragEvent) {
-    (event.target as HTMLElement).classList.remove('dragging');
     this.draggedTaskId.set(null);
     this.dragOverCol.set(null);
   }
@@ -84,38 +114,51 @@ export class TaskListComponent {
   }
 
   cycleStatus(task: Task) {
-    const cycle: TaskStatus[] = ['todo', 'inprogress', 'inreview', 'done'];
+    const cycle: TaskStatus[] = ['todo', 'inprogress', 'done'];
     const next = cycle[(cycle.indexOf(task.status) + 1) % cycle.length];
     this.taskService.updateStatus(task.id, next);
   }
 
+  // ── Helpers ───────────────────────────────────────────────
   priorityColor(p: string): string {
-    const map: Record<string, string> = { highest: '#ef4444', high: '#f97316', medium: '#f59e0b', low: '#10b981', lowest: '#06b6d4' };
+    const map: Record<string, string> = {
+      highest: '#ef4444', high: '#f97316',
+      medium: '#f59e0b', low: '#10b981', lowest: '#06b6d4',
+    };
     return map[p] ?? '#6b7280';
   }
+
   statusColor(s: string): string {
-    const map: Record<string, string> = { todo: '#9ca3af', inprogress: '#6366f1', inreview: '#f59e0b', done: '#10b981' };
+    const map: Record<string, string> = {
+      todo: '#9ca3af', inprogress: '#6366f1',
+      inreview: '#f59e0b', done: '#10b981',
+    };
     return map[s] ?? '#9ca3af';
   }
+
   statusLabel(s: string): string {
-    const map: Record<string, string> = { todo: 'To Do', inprogress: 'In Progress', inreview: 'In Review', done: 'Done' };
+    const map: Record<string, string> = {
+      todo: 'To Do', inprogress: 'In Progress',
+      inreview: 'In Review', done: 'Done',
+    };
     return map[s] ?? s;
   }
+
   workTypeIcon(w: string): string {
-    const map: Record<string, string> = { task: '✓', feature: '★', bug: '🐛', epic: '⚡' };
+    const map: Record<string, string> = {
+      task: '✓', feature: '★', bug: '🐛', epic: '⚡',
+    };
     return map[w] ?? '•';
   }
 
   columns: { status: TaskStatus; label: string; colorClass: string }[] = [
-    { status: 'todo',       label: 'To Do',      colorClass: 'kh-todo'   },
-    { status: 'inprogress', label: 'In Progress', colorClass: 'kh-prog'   },
-    { status: 'inreview',   label: 'In Review',   colorClass: 'kh-review' },
-    { status: 'done',       label: 'Done',        colorClass: 'kh-done'   },
+    { status: 'todo',       label: 'To Do',       colorClass: 'kh-todo'   },
+    { status: 'inprogress', label: 'In Progress',  colorClass: 'kh-prog'   },
+    { status: 'inreview',   label: 'In Review',    colorClass: 'kh-review' },
+    { status: 'done',       label: 'Done',         colorClass: 'kh-done'   },
   ];
 
   getColTasks(status: TaskStatus): Task[] {
     return this.sprintTasks().filter(t => t.status === status);
   }
-
-  
 }

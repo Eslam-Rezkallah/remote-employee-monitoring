@@ -2,14 +2,6 @@ import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 import { AuthService } from './services/auth.service';
 
-/**
- * Protects dashboard routes.
- *
- * Flow:
- *  1. Not logged in → /login
- *  2. Logged in but no orgId → /onboarding (must create/join org first)
- *  3. Logged in + has orgId → ✅ allow
- */
 export const authGuard: CanActivateFn = () => {
   const auth   = inject(AuthService);
   const router = inject(Router);
@@ -19,7 +11,7 @@ export const authGuard: CanActivateFn = () => {
     return false;
   }
 
-  // FIX: Check if user has joined/created an org
+  // ✅ FIX: currentUser() يرجع User | null مباشرة
   const user = auth.currentUser();
   if (!user?.orgId) {
     router.navigate(['/onboarding']);
@@ -29,14 +21,6 @@ export const authGuard: CanActivateFn = () => {
   return true;
 };
 
-/**
- * Blocks logged-in users from accessing /login and /signup.
- *
- * Flow:
- *  1. Not logged in → ✅ allow (show login/signup)
- *  2. Logged in but no orgId → /onboarding
- *  3. Logged in + has orgId → /dashboard
- */
 export const guestGuard: CanActivateFn = () => {
   const auth   = inject(AuthService);
   const router = inject(Router);

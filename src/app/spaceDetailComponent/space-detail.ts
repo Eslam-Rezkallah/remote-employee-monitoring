@@ -1,5 +1,5 @@
 import { Component, inject, signal, computed, OnInit } from '@angular/core';
-import { CommonModule, DecimalPipe, TitleCasePipe, SlicePipe } from '@angular/common';
+import { CommonModule, DecimalPipe, TitleCasePipe, SlicePipe , DatePipe } from '@angular/common';
 import { RouterModule, Router, ActivatedRoute } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
@@ -20,6 +20,7 @@ import { CreateSprintComponent } from '../createSprintComponent/create-sprint';
     DecimalPipe,
     TitleCasePipe,
     SlicePipe,
+    DatePipe,
   ],
   templateUrl: './space-detail.html',
   styleUrls: ['../dark-theme.css', '../../styles.css', './space-detail.css'],
@@ -349,15 +350,29 @@ export class SpaceDetailComponent implements OnInit {
   getTasksForDay(day: Date): Task[] {
     return this.calendarTasks().filter((t) => {
       if (!t.dueDate) return false;
-      const parsed = new Date(t.dueDate + ', ' + this.calendarYear());
+
+      // ✅ FIX: dueDate بعد الـ mapping بييجي كـ "Jan 5" أو ISO string
+      // بنحاول نعمل parse بطريقتين
+      let parsed: Date;
+
+      // لو ISO format
+      if (t.dueDate.includes('T') || t.dueDate.includes('-')) {
+        parsed = new Date(t.dueDate);
+      } else {
+        // لو "Jan 5" format — بنضيف السنة الحالية
+        parsed = new Date(`${t.dueDate} ${this.calendarYear()}`);
+      }
+
+      if (isNaN(parsed.getTime())) return false;
+
       return (
-        !isNaN(parsed.getTime()) &&
         parsed.getFullYear() === day.getFullYear() &&
         parsed.getMonth() === day.getMonth() &&
         parsed.getDate() === day.getDate()
       );
     });
   }
+
   isToday(day: Date): boolean {
     const t = new Date();
     return (

@@ -13,8 +13,6 @@ export interface User {
   orgId?: string;
 }
 
-// ── Centralised base URL ────────────────────────────────────
-// Change this ONE place when you deploy to production
 export const BASE = 'http://localhost:3000';
 
 @Injectable({ providedIn: 'root' })
@@ -33,10 +31,14 @@ export class AuthService {
     }
   }
 
-  get currentUser() {
+  // ✅ FIX: currentUser returns the signal itself
+  // استخدامها في الكومبوننت: auth.currentUser()  → User | null
+  // استخدامها في الجارد:     auth.currentUser()  → User | null  (مش signal)
+  get currentUser(): () => User | null {
     return this._currentUser;
   }
-  get token() {
+
+  get token(): () => string | null {
     return this._token;
   }
 
@@ -44,23 +46,19 @@ export class AuthService {
     return !!this._token();
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LOGIN — Email/Password
-  // Backend: POST /auth/login
-  // Body:    { email, password }
-  // Returns: { data: { accessToken, user } }
-  //          OR { data: { requiresOTP: true } } if 2FA enabled
-  // ═══════════════════════════════════════════════════════════
+  // ── LOGIN ────────────────────────────────────────────────
   async login(
     email: string,
     password: string,
   ): Promise<{ success: boolean; message: string; requiresOTP?: boolean }> {
     try {
       const res = await firstValueFrom(
-        this.http.post<{ message: string; data: any }>(`${BASE}/auth/login`, { email, password }),
+        this.http.post<{ message: string; data: any }>(
+          `${BASE}/auth/login`,
+          { email, password }
+        ),
       );
 
-      // If 2FA is enabled, backend returns requiresOTP instead of a token
       if (res.data?.requiresOTP) {
         return { success: false, message: '2FA_REQUIRED', requiresOTP: true };
       }
@@ -68,16 +66,11 @@ export class AuthService {
       await this.saveSession(res.data.accessToken, res.data.user);
       return { success: true, message: 'Login successful' };
     } catch (err: any) {
-      const msg = err?.error?.message || 'Invalid email or password';
-      return { success: false, message: msg };
+      return { success: false, message: err?.error?.message || 'Invalid email or password' };
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LOGIN — Validate 2FA OTP
-  // Backend: POST /auth/validate-login-otp
-  // Body:    { email, code }
-  // ═══════════════════════════════════════════════════════════
+  // ── VALIDATE 2FA OTP ─────────────────────────────────────
   async validateLoginOTP(
     email: string,
     code: string,
@@ -96,11 +89,7 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // LOGIN — Google OAuth
-  // Backend: POST /auth/loginWithGmail  { idToken }
-  //          POST /auth/signupWithGoogle { idToken }  (auto-signup)
-  // ═══════════════════════════════════════════════════════════
+  // ── LOGIN WITH GOOGLE ─────────────────────────────────────
   async loginWithGoogle(idToken: string): Promise<{ success: boolean; message: string }> {
     try {
       const res = await firstValueFrom(
@@ -112,28 +101,17 @@ export class AuthService {
       await this.saveSession(res.data.accessToken, res.data.user);
       return { success: true, message: 'Login successful' };
     } catch (loginErr: any) {
-      const status = loginErr?.status;
-
-      // User not found → auto signup then login
-      if (status === 404) {
-        return await this.signupWithGoogle(idToken);
-      }
-
-      // Registered with different provider (email/password)
-      if (status === 409) {
+      if (loginErr?.status === 404) return this.signupWithGoogle(idToken);
+      if (loginErr?.status === 409) {
         return { success: false, message: 'This email is already registered with email/password.' };
       }
-
       return { success: false, message: loginErr?.error?.message || 'Google Sign-In failed.' };
     }
   }
 
-  // ── Google Signup then Login ──────────────────────────────
   async signupWithGoogle(idToken: string): Promise<{ success: boolean; message: string }> {
     try {
       await firstValueFrom(this.http.post(`${BASE}/auth/signupWithGoogle`, { idToken }));
-
-      // Signup succeeded → now login
       const loginRes = await firstValueFrom(
         this.http.post<{ message: string; data: { accessToken: string; user: User } }>(
           `${BASE}/auth/loginWithGmail`,
@@ -143,7 +121,6 @@ export class AuthService {
       await this.saveSession(loginRes.data.accessToken, loginRes.data.user);
       return { success: true, message: 'Account created!' };
     } catch (err: any) {
-      // 409 = already exists → try login directly
       if (err?.status === 409) {
         try {
           const loginRes = await firstValueFrom(
@@ -162,11 +139,7 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // REGISTER — Email/Password
-  // Backend: POST /auth/signup
-  // Body:    { username, email, password, confirmPassword }
-  // ═══════════════════════════════════════════════════════════
+  // ── REGISTER ─────────────────────────────────────────────
   async register(data: {
     fullName: string;
     email: string;
@@ -187,11 +160,7 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // FORGOT PASSWORD — Step 1: Send OTP
-  // Backend: PATCH /auth/forget-password
-  // Body:    { email }
-  // ═══════════════════════════════════════════════════════════
+  // ── FORGOT PASSWORD ───────────────────────────────────────
   async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
     try {
       const res = await firstValueFrom(
@@ -203,11 +172,6 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // FORGOT PASSWORD — Step 2: Validate OTP
-  // Backend: PATCH /auth/validate-forget-password
-  // Body:    { email, code }
-  // ═══════════════════════════════════════════════════════════
   async validateForgotPasswordOTP(
     email: string,
     code: string,
@@ -215,8 +179,7 @@ export class AuthService {
     try {
       const res = await firstValueFrom(
         this.http.patch<{ message: string }>(`${BASE}/auth/validate-forget-password`, {
-          email,
-          code,
+          email, code,
         }),
       );
       return { success: true, message: res.message || 'OTP validated' };
@@ -225,11 +188,6 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // FORGOT PASSWORD — Step 3: Reset Password
-  // Backend: PATCH /auth/reset-password
-  // Body:    { email, password, confirmPassword }
-  // ═══════════════════════════════════════════════════════════
   async resetPassword(
     email: string,
     password: string,
@@ -248,11 +206,7 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // CONFIRM EMAIL
-  // Backend: PATCH /auth/confirm-email
-  // Body:    { email, code }
-  // ═══════════════════════════════════════════════════════════
+  // ── CONFIRM EMAIL ─────────────────────────────────────────
   async confirmEmail(email: string, code: string): Promise<{ success: boolean; message: string }> {
     try {
       const res = await firstValueFrom(
@@ -264,12 +218,10 @@ export class AuthService {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // SESSION MANAGEMENT
-  // ═══════════════════════════════════════════════════════════
-
+  // ── SESSION ───────────────────────────────────────────────
   private async saveSession(token: string, user?: User): Promise<void> {
-    if (!user) {
+    // لو الباك مبعتش user كامل، جيبه من /user/profile
+    if (!user || !user._id) {
       try {
         const profileRes = await firstValueFrom(
           this.http.get<{ message: string; data: { user: User } }>(`${BASE}/user/profile`, {
@@ -278,16 +230,27 @@ export class AuthService {
         );
         user = profileRes.data.user;
       } catch {
-        user = {
-          _id: '',
-          username: '',
-          email: '',
-          role: 'Member',
-        };
+        user = { _id: '', username: '', email: '', role: 'Member' };
       }
     }
 
     user.fullName = user.fullName ?? user.username;
+
+    // ✅ FIX: جيب الـ orgId من /org/me بعد اللوجين
+    try {
+      const orgRes = await firstValueFrom(
+        this.http.get<{ message: string; data: { organizations: any[] } }>(
+          `${BASE}/org/me`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
+      );
+      const firstOrg = orgRes.data?.organizations?.[0];
+      if (firstOrg?._id) {
+        user.orgId = firstOrg._id;
+      }
+    } catch {
+      // مفيش org بعد → يروح onboarding
+    }
 
     this._token.set(token);
     this._currentUser.set(user);
@@ -302,20 +265,11 @@ export class AuthService {
     localStorage.removeItem('rms_user');
   }
 
-  /** Update user fields locally (used by Profile/Account after PATCH) */
   updateUser(fields: Partial<User>): void {
     const user = this._currentUser();
     if (!user) return;
-
-    const updated = {
-      ...user,
-      ...fields,
-      role: fields.role ?? user.role,
-    };
-
+    const updated = { ...user, ...fields };
     this._currentUser.set(updated);
-
-    // 🔥 تأكد التخزين
     localStorage.setItem('rms_user', JSON.stringify(updated));
   }
 
@@ -327,7 +281,6 @@ export class AuthService {
     localStorage.setItem('rms_user', JSON.stringify(updated));
   }
 
-  // FIX: Backend route is GET /org/me (not /org/my)
   getMyOrgs() {
     return this.http.get(`${BASE}/org/me`);
   }

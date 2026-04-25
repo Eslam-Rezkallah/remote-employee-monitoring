@@ -6,6 +6,7 @@ import { NavbarComponent }  from '../navbarComponent/navbar';
 import { ThemeService }     from '../services/theme.service';
 import { ToastComponent }   from '../toastComponent/toast';
 import { SpaceService }     from '../services/space.service';
+import { AuthService }      from '../services/auth.service';
 
 @Component({
   selector: 'app-dashboard-layout',
@@ -17,9 +18,13 @@ import { SpaceService }     from '../services/space.service';
 export class DashboardLayoutComponent implements OnInit {
   themeService = inject(ThemeService);
   private spaceService = inject(SpaceService);
+  private auth = inject(AuthService);
 
   ngOnInit() {
-    // Load spaces once when dashboard loads
-    this.spaceService.loadSpaces();
+    // ✅ FIX: بس نحمل الـ spaces لو في orgId
+    const user = this.auth.currentUser();
+    if (user?.orgId) {
+      this.spaceService.loadSpaces();
+    }
   }
 }

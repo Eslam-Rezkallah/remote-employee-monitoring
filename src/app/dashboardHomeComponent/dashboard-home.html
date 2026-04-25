@@ -1,5 +1,4 @@
 <div class="page">
-
   <!-- ── Welcome strip ── -->
   <div class="welcome-strip">
     <div class="welcome-text">
@@ -8,7 +7,11 @@
     </div>
     <div class="date-pill">
       <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5"/>
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 9v7.5"
+        />
       </svg>
       {{ todayLabel() }}
     </div>
@@ -18,363 +21,648 @@
   @if (loading()) {
     <div class="empty-state" style="padding: 3rem">
       <svg class="h-8 w-8 animate-spin" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z" />
       </svg>
     </div>
   }
 
   <!-- ── Error state ── -->
   @if (error()) {
-    <div style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px">
+    <div
+      style="
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        font-size: 13px;
+      "
+    >
       {{ error() }}
     </div>
   }
 
   @if (!loading()) {
+    <!-- ── KPIs (computed from real task data) ── -->
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-icon ki-accent">
+          <svg
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z"
+            />
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Total Tasks</span>
+          <span class="kpi-val">{{ totalTasks() }}</span>
+          <span class="kpi-delta">{{ activeTasks() }} in progress</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-green">
+          <svg
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            />
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Tasks Completed</span>
+          <span class="kpi-val">{{ doneTasks() }}</span>
+          <span class="kpi-delta delta-up">{{ completionPct() }}% completion</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-amber">
+          <svg
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            />
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">Total Logged</span>
+          <span class="kpi-val">{{ totalLoggedHours() }}h</span>
+          <span class="kpi-delta">across all tasks</span>
+        </div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-icon ki-violet">
+          <svg
+            class="h-5 w-5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+            />
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <span class="kpi-lbl">To Do</span>
+          <span class="kpi-val">{{ todoTasks() }}</span>
+          <span class="kpi-delta">tasks remaining</span>
+        </div>
+      </div>
+    </div>
 
-  <!-- ── KPIs (computed from real task data) ── -->
-  <div class="kpi-grid">
-    <div class="kpi">
-      <div class="kpi-icon ki-accent">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z"/></svg>
-      </div>
-      <div class="kpi-body">
-        <span class="kpi-lbl">Total Tasks</span>
-        <span class="kpi-val">{{ totalTasks() }}</span>
-        <span class="kpi-delta">{{ activeTasks() }} in progress</span>
-      </div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon ki-green">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-      </div>
-      <div class="kpi-body">
-        <span class="kpi-lbl">Tasks Completed</span>
-        <span class="kpi-val">{{ doneTasks() }}</span>
-        <span class="kpi-delta delta-up">{{ completionPct() }}% completion</span>
-      </div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon ki-amber">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg>
-      </div>
-      <div class="kpi-body">
-        <span class="kpi-lbl">Total Logged</span>
-        <span class="kpi-val">{{ totalLogged() }}h</span>
-        <span class="kpi-delta">across all tasks</span>
-      </div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-icon ki-violet">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
-      </div>
-      <div class="kpi-body">
-        <span class="kpi-lbl">To Do</span>
-        <span class="kpi-val">{{ todoTasks() }}</span>
-        <span class="kpi-delta">tasks remaining</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ════════════════════════════════════════════════════════════
+    <!-- ════════════════════════════════════════════════════════════
        FOR YOU PANELS — FE-6.1 to 6.6
        ════════════════════════════════════════════════════════════ -->
-  <div class="for-you-section">
-    <div class="fy-section-header">
-      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/>
-      </svg>
-      For You
-    </div>
-
-    <div class="fy-panels">
-
-      <!-- ── FE-6.2 Worked On ── -->
-      <div class="fy-panel">
-        <div class="fyp-header">
-          <div class="fyp-title-row">
-            <span class="fyp-icon fyp-icon-blue">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-              </svg>
-            </span>
-            <span class="fyp-title">Worked On</span>
-            <span class="fyp-count">{{ workedOnTasks().length }}</span>
-          </div>
-          <div class="fyp-filters">
-            @for (f of filterOptions; track f.value) {
-              <button class="fyp-filter-btn"
-                      [class.active]="workedOnFilter() === f.value"
-                      (click)="workedOnFilter.set(f.value)">
-                {{ f.label }}
-              </button>
-            }
-          </div>
-        </div>
-
-        <div class="fyp-cards">
-          @if (workedOnTasks().length === 0) {
-            <div class="fyp-empty">No tasks match this filter.</div>
-          }
-          @for (task of workedOnTasks(); track task.id) {
-            <div class="fy-card">
-              <div class="fyc-top">
-                <span class="fyc-type">{{ workTypeIcon(task.workType) }}</span>
-                <span class="fyc-title">{{ task.title }}</span>
-                <span class="fyc-status-dot" [style.background]="statusColor(task.status)" [title]="statusLabel(task.status)"></span>
-              </div>
-              <div class="fyc-meta">
-                <span class="fyc-badge"
-                      [style.background]="priorityColor(task.priority) + '18'"
-                      [style.color]="priorityColor(task.priority)">
-                  {{ task.priority | titlecase }}
-                </span>
-                <span class="fyc-space">{{ task.sprint }}</span>
-                <span class="fyc-time">
-                  <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/>
-                  </svg>
-                  {{ task.logged }}h logged
-                </span>
-              </div>
-              @if (task.status === 'inprogress' && task.progress > 0) {
-                <div class="fyc-prog">
-                  <div class="fyc-prog-fill" [style.width]="task.progress + '%'"></div>
-                </div>
-              }
-            </div>
-          }
-        </div>
+    <div class="for-you-section">
+      <div class="fy-section-header">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+          />
+        </svg>
+        For You
       </div>
 
-      <!-- ── FE-6.3 Assigned to Me ── -->
-      <div class="fy-panel">
-        <div class="fyp-header">
-          <div class="fyp-title-row">
-            <span class="fyp-icon fyp-icon-violet">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/>
-              </svg>
-            </span>
-            <span class="fyp-title">Assigned to Me</span>
-            <span class="fyp-count">{{ assignedToMeTasks().length }}</span>
-          </div>
-          <div class="fyp-filters">
-            @for (f of filterOptions.slice(0, 4); track f.value) {
-              <button class="fyp-filter-btn"
-                      [class.active]="assignedMeFilter() === f.value"
-                      (click)="assignedMeFilter.set(f.value)">
-                {{ f.label }}
-              </button>
-            }
-          </div>
-        </div>
-
-        <div class="fyp-cards">
-          @if (assignedToMeTasks().length === 0) {
-            <div class="fyp-empty">
-              @if (assignedMeFilter() === 'all') {
-                No tasks assigned to you right now.
-              } @else {
-                No tasks match this filter.
+      <div class="fy-panels">
+        <!-- ── FE-6.2 Worked On ── -->
+        <div class="fy-panel">
+          <div class="fyp-header">
+            <div class="fyp-title-row">
+              <span class="fyp-icon fyp-icon-blue">
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                  />
+                </svg>
+              </span>
+              <span class="fyp-title">Worked On</span>
+              <span class="fyp-count">{{ workedOnTasks().length }}</span>
+            </div>
+            <div class="fyp-filters">
+              @for (f of filterOptions; track f.value) {
+                <button
+                  class="fyp-filter-btn"
+                  [class.active]="workedOnFilter() === f.value"
+                  (click)="workedOnFilter.set(f.value)"
+                >
+                  {{ f.label }}
+                </button>
               }
             </div>
-          }
-          @for (task of assignedToMeTasks(); track task.id) {
-            <div class="fy-card" [class.fyc-urgent]="task.priority === 'highest'">
-              <div class="fyc-top">
-                <span class="fyc-type">{{ workTypeIcon(task.workType) }}</span>
-                <span class="fyc-title">{{ task.title }}</span>
-                <span class="fyc-status-badge"
-                      [style.background]="statusColor(task.status) + '18'"
-                      [style.color]="statusColor(task.status)">
-                  {{ statusLabel(task.status) }}
-                </span>
-              </div>
-              <div class="fyc-meta">
-                <span class="fyc-badge"
-                      [style.background]="priorityColor(task.priority) + '18'"
-                      [style.color]="priorityColor(task.priority)">
-                  {{ task.priority | titlecase }}
-                </span>
-                <span class="fyc-space">{{ task.sprint }}</span>
-                @if (task.dueDate) {
-                  <span class="fyc-due">
-                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25"/>
-                    </svg>
-                    {{ task.dueDate }}
+          </div>
+
+          <div class="fyp-cards">
+            @if (workedOnTasks().length === 0) {
+              <div class="fyp-empty">No tasks match this filter.</div>
+            }
+            @for (task of workedOnTasks(); track task.id) {
+              <div class="fy-card">
+                <div class="fyc-top">
+                  <span class="fyc-type">{{ workTypeIcon(task.workType) }}</span>
+                  <span class="fyc-title">{{ task.title }}</span>
+                  <span
+                    class="fyc-status-dot"
+                    [style.background]="statusColor(task.status)"
+                    [title]="statusLabel(task.status)"
+                  ></span>
+                </div>
+                <div class="fyc-meta">
+                  <span
+                    class="fyc-badge"
+                    [style.background]="priorityColor(task.priority) + '18'"
+                    [style.color]="priorityColor(task.priority)"
+                  >
+                    {{ task.priority | titlecase }}
                   </span>
+                  <span class="fyc-space">{{ task.sprint }}</span>
+                  <span class="fyc-time">
+                    <svg
+                      class="h-3 w-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                      />
+                    </svg>
+                    {{ task.logged }}h logged
+                  </span>
+                </div>
+                @if (task.status === 'inprogress' && task.progress > 0) {
+                  <div class="fyc-prog">
+                    <div class="fyc-prog-fill" [style.width]="task.progress + '%'"></div>
+                  </div>
                 }
               </div>
-              @if (task.status === 'inprogress' && task.progress > 0) {
-                <div class="fyc-prog">
-                  <div class="fyc-prog-fill fyc-prog-violet" [style.width]="task.progress + '%'"></div>
-                </div>
-              }
-            </div>
-          }
-        </div>
-      </div>
-
-      <!-- ── FE-6.4 Assigned to Someone ── -->
-      <div class="fy-panel">
-        <div class="fyp-header">
-          <div class="fyp-title-row">
-            <span class="fyp-icon fyp-icon-amber">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/>
-              </svg>
-            </span>
-            <span class="fyp-title">Assigned to Someone</span>
-            <span class="fyp-count">{{ assignedToSelectedTasks().length }}</span>
-          </div>
-
-          <div class="fyp-filters">
-            <select class="fyp-select"
-                    [value]="selectedAssignee()"
-                    (change)="selectedAssignee.set($any($event.target).value)">
-              <option value="all">Everyone</option>
-              @for (a of otherAssignees(); track a) {
-                <option [value]="a">{{ a }}</option>
-              }
-            </select>
-          </div>
-          <div class="fyp-filters fyp-filters-top">
-            @for (f of filterOptions.slice(0, 4); track f.value) {
-              <button class="fyp-filter-btn"
-                      [class.active]="assignedSomFilter() === f.value"
-                      (click)="assignedSomFilter.set(f.value)">
-                {{ f.label }}
-              </button>
             }
           </div>
         </div>
 
-        <div class="fyp-cards">
-          @if (assignedToSelectedTasks().length === 0) {
-            <div class="fyp-empty">No tasks match this filter.</div>
-          }
-          @for (task of assignedToSelectedTasks(); track task.id) {
-            <div class="fy-card">
-              <div class="fyc-top">
-                <div class="fyc-av" [style.background]="task.assigneeColor">{{ task.assigneeInitial }}</div>
-                <span class="fyc-title">{{ task.title }}</span>
-                <span class="fyc-status-badge"
-                      [style.background]="statusColor(task.status) + '18'"
-                      [style.color]="statusColor(task.status)">
-                  {{ statusLabel(task.status) }}
-                </span>
-              </div>
-              <div class="fyc-meta">
-                <span class="fyc-assignee-name">{{ task.assignee }}</span>
-                <span class="fyc-badge"
-                      [style.background]="priorityColor(task.priority) + '18'"
-                      [style.color]="priorityColor(task.priority)">
-                  {{ task.priority | titlecase }}
-                </span>
-                @if (task.dueDate) {
-                  <span class="fyc-due">
-                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                      <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25"/>
-                    </svg>
-                    {{ task.dueDate }}
-                  </span>
+        <!-- ── FE-6.3 Assigned to Me ── -->
+        <div class="fy-panel">
+          <div class="fyp-header">
+            <div class="fyp-title-row">
+              <span class="fyp-icon fyp-icon-violet">
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
+                  />
+                </svg>
+              </span>
+              <span class="fyp-title">Assigned to Me</span>
+              <span class="fyp-count">{{ assignedToMeTasks().length }}</span>
+            </div>
+            <div class="fyp-filters">
+              @for (f of filterOptions.slice(0, 4); track f.value) {
+                <button
+                  class="fyp-filter-btn"
+                  [class.active]="assignedMeFilter() === f.value"
+                  (click)="assignedMeFilter.set(f.value)"
+                >
+                  {{ f.label }}
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="fyp-cards">
+            @if (assignedToMeTasks().length === 0) {
+              <div class="fyp-empty">
+                @if (assignedMeFilter() === 'all') {
+                  No tasks assigned to you right now.
+                } @else {
+                  No tasks match this filter.
                 }
               </div>
+            }
+            @for (task of assignedToMeTasks(); track task.id) {
+              <div class="fy-card" [class.fyc-urgent]="task.priority === 'highest'">
+                <div class="fyc-top">
+                  <span class="fyc-type">{{ workTypeIcon(task.workType) }}</span>
+                  <span class="fyc-title">{{ task.title }}</span>
+                  <span
+                    class="fyc-status-badge"
+                    [style.background]="statusColor(task.status) + '18'"
+                    [style.color]="statusColor(task.status)"
+                  >
+                    {{ statusLabel(task.status) }}
+                  </span>
+                </div>
+                <div class="fyc-meta">
+                  <span
+                    class="fyc-badge"
+                    [style.background]="priorityColor(task.priority) + '18'"
+                    [style.color]="priorityColor(task.priority)"
+                  >
+                    {{ task.priority | titlecase }}
+                  </span>
+                  <span class="fyc-space">{{ task.sprint }}</span>
+                  @if (task.dueDate) {
+                    <span class="fyc-due">
+                      <svg
+                        class="h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25"
+                        />
+                      </svg>
+                      {{ task.dueDate }}
+                    </span>
+                  }
+                </div>
+                @if (task.status === 'inprogress' && task.progress > 0) {
+                  <div class="fyc-prog">
+                    <div
+                      class="fyc-prog-fill fyc-prog-violet"
+                      [style.width]="task.progress + '%'"
+                    ></div>
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- ── FE-6.4 Assigned to Someone ── -->
+        <div class="fy-panel">
+          <div class="fyp-header">
+            <div class="fyp-title-row">
+              <span class="fyp-icon fyp-icon-amber">
+                <svg
+                  class="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"
+                  />
+                </svg>
+              </span>
+              <span class="fyp-title">Assigned to Someone</span>
+              <span class="fyp-count">{{ assignedToSelectedTasks().length }}</span>
             </div>
-          }
+
+            <div class="fyp-filters">
+              <select
+                class="fyp-select"
+                [value]="selectedAssignee()"
+                (change)="selectedAssignee.set($any($event.target).value)"
+              >
+                <option value="all">Everyone</option>
+                @for (a of otherAssignees(); track a) {
+                  <option [value]="a">{{ a }}</option>
+                }
+              </select>
+            </div>
+            <div class="fyp-filters fyp-filters-top">
+              @for (f of filterOptions.slice(0, 4); track f.value) {
+                <button
+                  class="fyp-filter-btn"
+                  [class.active]="teamFilter() === f.value"
+                  (click)="teamFilter.set(f.value)"
+                >
+                  {{ f.label }}
+                </button>
+              }
+            </div>
+          </div>
+
+          <div class="fyp-cards">
+            @if (assignedToSelectedTasks().length === 0) {
+              <div class="fyp-empty">No tasks match this filter.</div>
+            }
+            @for (task of assignedToSelectedTasks(); track task.id) {
+              <div class="fy-card">
+                <div class="fyc-top">
+                  <div class="fyc-av" [style.background]="task.assigneeColor">
+                    {{ task.assigneeInitial }}
+                  </div>
+                  <span class="fyc-title">{{ task.title }}</span>
+                  <span
+                    class="fyc-status-badge"
+                    [style.background]="statusColor(task.status) + '18'"
+                    [style.color]="statusColor(task.status)"
+                  >
+                    {{ statusLabel(task.status) }}
+                  </span>
+                </div>
+                <div class="fyc-meta">
+                  <span class="fyc-assignee-name">{{ task.assignee }}</span>
+                  <span
+                    class="fyc-badge"
+                    [style.background]="priorityColor(task.priority) + '18'"
+                    [style.color]="priorityColor(task.priority)"
+                  >
+                    {{ task.priority | titlecase }}
+                  </span>
+                  @if (task.dueDate) {
+                    <span class="fyc-due">
+                      <svg
+                        class="h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        stroke-width="2"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25"
+                        />
+                      </svg>
+                      {{ task.dueDate }}
+                    </span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
         </div>
       </div>
-
     </div>
-  </div>
 
-  <!-- ── Mid row (kept as-is — static demo) ── -->
-  <div class="mid-row">
-    <div class="card">
-      <div class="card-header">
-        <div><div class="card-title">Weekly Activity</div><div class="card-sub">Work hours per day — this week</div></div>
+    <!-- ── Mid row (kept as-is — static demo) ── -->
+    <div class="mid-row">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Weekly Activity</div>
+            <div class="card-sub">Work hours per day — this week</div>
+          </div>
+        </div>
+        <div class="bar-chart">
+          <div class="bc">
+            <div class="bc-bar bc-bar-55"><span class="bc-val">5.5h</span></div>
+            <span class="bc-lbl">Mon</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar is-peak bc-bar-72"><span class="bc-val">7.2h</span></div>
+            <span class="bc-lbl">Tue</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar bc-bar-68"><span class="bc-val">6.8h</span></div>
+            <span class="bc-lbl">Wed</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar is-peak bc-bar-80"><span class="bc-val">8.0h</span></div>
+            <span class="bc-lbl">Thu</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar bc-bar-45"><span class="bc-val">4.5h</span></div>
+            <span class="bc-lbl">Fri</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar is-off bc-bar-20"><span class="bc-val">2h</span></div>
+            <span class="bc-lbl">Sat</span>
+          </div>
+          <div class="bc">
+            <div class="bc-bar is-off bc-bar-04"><span class="bc-val">—</span></div>
+            <span class="bc-lbl">Sun</span>
+          </div>
+        </div>
+        <div class="chart-legend">
+          <span class="legend-item"><span class="legend-dot legend-dot-peak"></span>Peak day</span>
+          <span class="legend-item"><span class="legend-dot legend-dot-normal"></span>Normal</span>
+          <span class="legend-item"><span class="legend-dot legend-dot-off"></span>Off</span>
+        </div>
       </div>
-      <div class="bar-chart">
-        <div class="bc"><div class="bc-bar bc-bar-55"><span class="bc-val">5.5h</span></div><span class="bc-lbl">Mon</span></div>
-        <div class="bc"><div class="bc-bar is-peak bc-bar-72"><span class="bc-val">7.2h</span></div><span class="bc-lbl">Tue</span></div>
-        <div class="bc"><div class="bc-bar bc-bar-68"><span class="bc-val">6.8h</span></div><span class="bc-lbl">Wed</span></div>
-        <div class="bc"><div class="bc-bar is-peak bc-bar-80"><span class="bc-val">8.0h</span></div><span class="bc-lbl">Thu</span></div>
-        <div class="bc"><div class="bc-bar bc-bar-45"><span class="bc-val">4.5h</span></div><span class="bc-lbl">Fri</span></div>
-        <div class="bc"><div class="bc-bar is-off bc-bar-20"><span class="bc-val">2h</span></div><span class="bc-lbl">Sat</span></div>
-        <div class="bc"><div class="bc-bar is-off bc-bar-04"><span class="bc-val">—</span></div><span class="bc-lbl">Sun</span></div>
-      </div>
-      <div class="chart-legend">
-        <span class="legend-item"><span class="legend-dot legend-dot-peak"></span>Peak day</span>
-        <span class="legend-item"><span class="legend-dot legend-dot-normal"></span>Normal</span>
-        <span class="legend-item"><span class="legend-dot legend-dot-off"></span>Off</span>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">AI Performance Clusters</div>
+          <span class="ai-chip">
+            <svg
+              class="h-3 w-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"
+              />
+            </svg>
+            ML Active
+          </span>
+        </div>
+        <div class="cluster-list">
+          <div class="cluster-row">
+            <span class="cl-dot cld-high"></span>
+            <div class="cl-info">
+              <span class="cl-name">High Performers</span
+              ><span class="cl-desc">Consistent output · low idle time</span>
+            </div>
+            <div class="cl-right">
+              <span class="cl-count">8</span>
+              <div class="cl-track"><div class="cl-fill clf-high clf-high-width"></div></div>
+            </div>
+          </div>
+          <div class="cluster-row">
+            <span class="cl-dot cld-mid"></span>
+            <div class="cl-info">
+              <span class="cl-name">Average Performers</span
+              ><span class="cl-desc">Moderate activity patterns</span>
+            </div>
+            <div class="cl-right">
+              <span class="cl-count">11</span>
+              <div class="cl-track"><div class="cl-fill clf-mid clf-mid-width"></div></div>
+            </div>
+          </div>
+          <div class="cluster-row">
+            <span class="cl-dot cld-low"></span>
+            <div class="cl-info">
+              <span class="cl-name">Needs Attention</span
+              ><span class="cl-desc">High idle · low task completion</span>
+            </div>
+            <div class="cl-right">
+              <span class="cl-count">5</span>
+              <div class="cl-track"><div class="cl-fill clf-low clf-low-width"></div></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn-ghost btn-full-width">View Full Analytics →</button>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">AI Performance Clusters</div>
-        <span class="ai-chip">
-          <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/></svg>
-          ML Active
-        </span>
-      </div>
-      <div class="cluster-list">
-        <div class="cluster-row"><span class="cl-dot cld-high"></span><div class="cl-info"><span class="cl-name">High Performers</span><span class="cl-desc">Consistent output · low idle time</span></div><div class="cl-right"><span class="cl-count">8</span><div class="cl-track"><div class="cl-fill clf-high clf-high-width"></div></div></div></div>
-        <div class="cluster-row"><span class="cl-dot cld-mid"></span><div class="cl-info"><span class="cl-name">Average Performers</span><span class="cl-desc">Moderate activity patterns</span></div><div class="cl-right"><span class="cl-count">11</span><div class="cl-track"><div class="cl-fill clf-mid clf-mid-width"></div></div></div></div>
-        <div class="cluster-row"><span class="cl-dot cld-low"></span><div class="cl-info"><span class="cl-name">Needs Attention</span><span class="cl-desc">High idle · low task completion</span></div><div class="cl-right"><span class="cl-count">5</span><div class="cl-track"><div class="cl-fill clf-low clf-low-width"></div></div></div></div>
-      </div>
-      <button class="btn-ghost btn-full-width">View Full Analytics →</button>
-    </div>
-  </div>
 
-  <!-- ── Bottom row — Dynamic Recent Tasks + Static Sessions ── -->
-  <div class="bot-row">
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Recent Tasks</div>
-        <a routerLink="/dashboard/tasks" class="link-sm">View all →</a>
-      </div>
-      <table class="data-table">
-        <thead><tr><th>Task</th><th>Assignee</th><th>Priority</th><th>Status</th><th>Due</th></tr></thead>
-        <tbody>
-          @if (recentTasks().length === 0) {
-            <tr><td colspan="5" style="text-align: center; color: var(--color-text-secondary, #6b7280); padding: 1.5rem; font-size: .85rem">No tasks yet — create one to get started.</td></tr>
-          }
-          @for (task of recentTasks(); track task.id) {
+    <!-- ── Bottom row — Dynamic Recent Tasks + Static Sessions ── -->
+    <div class="bot-row">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Recent Tasks</div>
+          <a routerLink="/dashboard/tasks" class="link-sm">View all →</a>
+        </div>
+        <table class="data-table">
+          <thead>
             <tr>
-              <td class="table-task-name">{{ task.title }}</td>
-              <td>
-                <div class="emp-cell">
-                  <div class="av av-32" [style.background]="task.assigneeColor || '#6366f1'">{{ task.assigneeInitial || '?' }}</div>
-                  {{ task.assignee || 'Unassigned' }}
-                </div>
-              </td>
-              <td><span class="badge" [ngClass]="priorityBadgeClass(task.priority)">{{ task.priority | titlecase }}</span></td>
-              <td><span class="badge" [ngClass]="statusBadgeClass(task.status)">{{ statusLabel(task.status) }}</span></td>
-              <td class="table-due-date">{{ task.dueDate || '—' }}</td>
+              <th>Task</th>
+              <th>Assignee</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th>Due</th>
             </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Active Sessions</div>
-        <div class="live-bar"><div class="live-dot"></div>Live</div>
+          </thead>
+          <tbody>
+            @if (recentTasks().length === 0) {
+              <tr>
+                <td
+                  colspan="5"
+                  style="
+                    text-align: center;
+                    color: var(--color-text-secondary, #6b7280);
+                    padding: 1.5rem;
+                    font-size: 0.85rem;
+                  "
+                >
+                  No tasks yet — create one to get started.
+                </td>
+              </tr>
+            }
+            @for (task of recentTasks(); track task.id) {
+              <tr>
+                <td class="table-task-name">{{ task.title }}</td>
+                <td>
+                  <div class="emp-cell">
+                    <div class="av av-32" [style.background]="task.assigneeColor || '#6366f1'">
+                      {{ task.assigneeInitial || '?' }}
+                    </div>
+                    {{ task.assignee || 'Unassigned' }}
+                  </div>
+                </td>
+                <td>
+                  <span class="badge" [ngClass]="priorityBadgeClass(task.priority)">{{
+                    task.priority | titlecase
+                  }}</span>
+                </td>
+                <td>
+                  <span class="badge" [ngClass]="statusBadgeClass(task.status)">{{
+                    statusLabel(task.status)
+                  }}</span>
+                </td>
+                <td class="table-due-date">{{ task.dueDate || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
       </div>
-      <div class="session-list">
-        <!-- Static demo data — will be dynamic in Phase 6 (Work Sessions) -->
-        <div class="session-row"><div class="av av-36 av1">A</div><div class="sess-info"><span class="sess-name">Ali Hassan</span><span class="sess-task">API Auth module</span></div><div class="sess-meta"><span class="sess-time">3h 22m</span><span class="sess-st st-on">Active</span></div></div>
-        <div class="session-row"><div class="av av-36 av2">S</div><div class="sess-info"><span class="sess-name">Sara Nour</span><span class="sess-task">Frontend design</span></div><div class="sess-meta"><span class="sess-time">2h 05m</span><span class="sess-st st-on">Active</span></div></div>
-        <div class="session-row"><div class="av av-36 av3">M</div><div class="sess-info"><span class="sess-name">Mohamed K.</span><span class="sess-task">Unit tests</span></div><div class="sess-meta"><span class="sess-time">1h 48m</span><span class="sess-st st-idle">Idle</span></div></div>
-        <div class="session-row"><div class="av av-36 av4">N</div><div class="sess-info"><span class="sess-name">Nada Ali</span><span class="sess-task">DB schema design</span></div><div class="sess-meta"><span class="sess-time">4h 10m</span><span class="sess-st st-on">Active</span></div></div>
-        <div class="session-row"><div class="av av-36 av5">O</div><div class="sess-info"><span class="sess-name">Omar Fathy</span><span class="sess-task">Documentation</span></div><div class="sess-meta"><span class="sess-time">0h 30m</span><span class="sess-st st-idle">Idle</span></div></div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Active Sessions</div>
+          <div class="live-bar">
+            <div class="live-dot"></div>
+            Live
+          </div>
+        </div>
+        <div class="session-list">
+          <!-- Static demo data — will be dynamic in Phase 6 (Work Sessions) -->
+          <div class="session-row">
+            <div class="av av-36 av1">A</div>
+            <div class="sess-info">
+              <span class="sess-name">Ali Hassan</span
+              ><span class="sess-task">API Auth module</span>
+            </div>
+            <div class="sess-meta">
+              <span class="sess-time">3h 22m</span><span class="sess-st st-on">Active</span>
+            </div>
+          </div>
+          <div class="session-row">
+            <div class="av av-36 av2">S</div>
+            <div class="sess-info">
+              <span class="sess-name">Sara Nour</span><span class="sess-task">Frontend design</span>
+            </div>
+            <div class="sess-meta">
+              <span class="sess-time">2h 05m</span><span class="sess-st st-on">Active</span>
+            </div>
+          </div>
+          <div class="session-row">
+            <div class="av av-36 av3">M</div>
+            <div class="sess-info">
+              <span class="sess-name">Mohamed K.</span><span class="sess-task">Unit tests</span>
+            </div>
+            <div class="sess-meta">
+              <span class="sess-time">1h 48m</span><span class="sess-st st-idle">Idle</span>
+            </div>
+          </div>
+          <div class="session-row">
+            <div class="av av-36 av4">N</div>
+            <div class="sess-info">
+              <span class="sess-name">Nada Ali</span><span class="sess-task">DB schema design</span>
+            </div>
+            <div class="sess-meta">
+              <span class="sess-time">4h 10m</span><span class="sess-st st-on">Active</span>
+            </div>
+          </div>
+          <div class="session-row">
+            <div class="av av-36 av5">O</div>
+            <div class="sess-info">
+              <span class="sess-name">Omar Fathy</span><span class="sess-task">Documentation</span>
+            </div>
+            <div class="sess-meta">
+              <span class="sess-time">0h 30m</span><span class="sess-st st-idle">Idle</span>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-
-  } <!-- end !loading() -->
-
+  }
+  <!-- end !loading() -->
 </div>

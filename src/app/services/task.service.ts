@@ -136,31 +136,34 @@ export function mapTask(t: any): Task {
   const assignee = t.assigneeId?.username ?? t.assigneeId ?? '';
   const assigneeName = typeof assignee === 'string' ? assignee : '';
   return {
-    id: t._id,
-    _id: t._id,
-    title: t.title ?? '',
-    description: t.description ?? '',
-    status: mapStatus(t.status),
-    priority: mapPriority(t.priority),
-    workType: mapWorkType(t.type),
-    assignee: assigneeName,
-    assigneeId: typeof t.assigneeId === 'object' ? t.assigneeId?._id : t.assigneeId,
+    id:              t._id,
+    _id:             t._id,
+    title:           t.title ?? '',
+    description:     t.description ?? '',
+    status:          mapStatus(t.status),
+    priority:        mapPriority(t.priority),
+    workType:        mapWorkType(t.type),
+    assignee:        assigneeName,
+    assigneeId:      typeof t.assigneeId === 'object' ? t.assigneeId?._id : t.assigneeId,
     assigneeInitial: assigneeName.charAt(0).toUpperCase() || '?',
-    assigneeColor: '#6366f1',
-    reporter: typeof t.reporterId === 'object' ? (t.reporterId?.username ?? '') : '',
-    spaceId: typeof t.spaceId === 'object' ? t.spaceId?._id : (t.spaceId ?? ''),
-    sprint: typeof t.sprintId === 'object' ? (t.sprintId?.name ?? '') : (t.sprintId ?? ''),
-    sprintId: typeof t.sprintId === 'object' ? t.sprintId?._id : t.sprintId,
-    dueDate: t.dueDate ? formatTaskDate(t.dueDate) : '',
-    startDate: t.startDate ? formatTaskDate(t.startDate) : '',
-    estimated: t.points ?? 0,
-    logged: 0,
-    progress: t.status === 'Done' ? 100 : t.status === 'InProgress' ? 50 : 0,
-    labels: t.labels ?? [],
-    parentId: t.parentTaskId ?? undefined,
-    component: t.labels?.[0] ?? '',
+    assigneeColor:   '#6366f1',
+    reporter:        typeof t.reporterId === 'object' ? (t.reporterId?.username ?? '') : '',
+    spaceId:         typeof t.spaceId === 'object' ? t.spaceId?._id : (t.spaceId ?? ''),
+    sprint:          typeof t.sprintId === 'object' ? (t.sprintId?.name ?? '') : (t.sprintId ?? ''),
+    sprintId:        typeof t.sprintId === 'object' ? t.sprintId?._id : t.sprintId,
+    // ✅ FIX: بنحفظ الـ raw ISO date عشان الـ calendar يشتغل
+    dueDate:         t.dueDate ? t.dueDate : '', // raw ISO — للـ calendar
+    startDate:       t.startDate ? t.startDate : '',
+    estimated:       t.points ?? 0,
+    logged:          0,
+    progress:        t.status === 'Done' ? 100 : t.status === 'InProgress' ? 50 : 0,
+    labels:          t.labels ?? [],
+    parentId:        t.parentTaskId ?? undefined,
+    component:       t.labels?.[0] ?? '',
   };
 }
+
+// ✅ فضلنا formatTaskDate بس للـ display في الـ UI مش للتخزين
 
 // ══════════════════════════════════════════════════════════
 // SERVICE

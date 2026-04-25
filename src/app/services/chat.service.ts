@@ -1,78 +1,41 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { AuthService, BASE } from './auth.service';
 
 export type ConvType = 'channel' | 'group' | 'direct' | 'organization' | 'team';
-export type MsgType = 'text' | 'image' | 'voice' | 'file';
+export type MsgType  = 'text' | 'image' | 'voice' | 'file';
 
 export interface BackendMessage {
-  _id: string;
-  chatRoomId: string;
-  senderId: { _id: string; username: string; image?: any };
-  content: string;
+  _id:         string;
+  chatRoomId:  string;
+  senderId:    { _id: string; username: string; image?: any };
+  content:     string;
   messageType: MsgType;
   attachments?: { url: string; originalName: string; mimeType?: string }[];
-  replyTo?: string | BackendMessage;
-  createdAt: string;
-  edited?: boolean;
-  reactions?: { emoji: string; userId: string; username?: string }[];
-  readBy?: string[];
+  replyTo?:    string | BackendMessage;
+  createdAt:   string;
+  edited?:     boolean;
+  reactions?:  { emoji: string; userId: string; username?: string }[];
+  readBy?:     string[];
   deliveredTo?: string[];
 }
 
 export interface Conversation {
-  _id: string;
-  name: string | null;
-  type: ConvType;
-  members: { _id: string; username: string; image?: any }[];
-  lastMessage?: any;
+  _id:           string;
+  name:          string | null;
+  type:          ConvType;
+  members:       { _id: string; username: string; image?: any }[];
+  admins?:       { _id: string; username: string }[];
+  lastMessage?:  any;
   lastMessageAt?: string;
   unreadCounts?: Record<string, number>;
-  isDeleted?: boolean;
-  isPrivate?: boolean;
+  unreadCount?:  number;
+  isDeleted?:    boolean;
+  isPrivate?:    boolean;
   organizationId?: string;
 }
 
-/**
- * Chat service — all REST endpoints for rooms, messages, reactions, read receipts.
- *
- * Backend endpoints:
- *   Rooms:
- *     GET    /org/:orgId/chat-rooms              → list rooms for org
- *     GET    /chat/rooms?page=1&limit=50         → list rooms (generic)
- *     GET    /chat/rooms/:roomId                 → single room details
- *     GET    /chat/rooms/unread-counts            → unread counts per room
- *     POST   /chat/rooms/direct                   → create DM
- *     POST   /chat/rooms/channel                  → create channel
- *     POST   /chat/rooms/group                    → create group
- *     PATCH  /chat/rooms/:roomId                  → update room
- *     DELETE /chat/rooms/:roomId                  → delete room
- *     POST   /chat/rooms/:roomId/join             → join channel
- *     DELETE /chat/rooms/:roomId/leave            → leave room
- *     POST   /chat/rooms/:roomId/members/:userId  → add member
- *     DELETE /chat/rooms/:roomId/members/:userId  → remove member
- *
- *   Messages:
- *     GET    /chat/rooms/:roomId/messages?limit=50    → load messages
- *     GET    /chat/rooms/:roomId/messages/search?q=…  → search messages
- *     POST   /chat/rooms/:roomId/messages             → send message
- *     PATCH  /chat/rooms/:roomId/messages/:msgId      → edit message
- *     DELETE /chat/rooms/:roomId/messages/:msgId      → delete message
- *
- *   Reactions:
- *     POST   /chat/rooms/:roomId/messages/:msgId/reactions    → add reaction
- *     GET    /chat/rooms/:roomId/messages/:msgId/reactions    → get reactions
- *     DELETE /chat/rooms/:roomId/messages/:msgId/reactions    → remove reaction
- *
- *   Read Receipts:
- *     PATCH  /chat/rooms/:roomId/messages/:msgId/seen         → mark seen
- *     PATCH  /chat/rooms/:roomId/messages/:msgId/delivered     → mark delivered
- *
- *   Calls:
- *     GET    /chat/rooms/:roomId/calls?page=1&limit=20  → call history
- *     GET    /chat/rooms/:roomId/calls/active             → active call
- */
 @Injectable({ providedIn: 'root' })
 export class ChatService {
   private http = inject(HttpClient);
@@ -82,16 +45,28 @@ export class ChatService {
     return this.auth.currentUser()?.orgId ?? '';
   }
 
-  // ── Rooms ───────────────────────────────────────────────
+  // ── Rooms ─────────────────────────────────────────────────
 
   async loadRooms(): Promise<Conversation[]> {
     try {
-      const url = this.orgId
-        ? `${BASE}/org/${this.orgId}/chat-rooms`
-        : `${BASE}/chat/rooms?limit=50`;
-      const res = await firstValueFrom(this.http.get<{ data: any }>(url));
+      // ✅ استخدم /org/:orgId/chat-rooms لو في orgId
+      // ده بيرجع الـ rooms مجمعة حسب النوع + unread
+      if (this.orgId) {
+        const res = await firstValueFrom(
+          this.http.get<{ data: any }>(`${BASE}/org/${this.orgId}/chat-rooms`)
+        );
+        // Response: { data: { rooms: [...], grouped: {...}, total } }
+        const rooms: Conversation[] = res?.data?.rooms ?? [];
+        return rooms.filter(r => !r.isDeleted);
+      }
+
+      // Fallback: /chat/rooms
+      const res = await firstValueFrom(
+        this.http.get<{ data: any }>(`${BASE}/chat/rooms?limit=50`)
+      );
       const rooms: Conversation[] = res?.data?.rooms ?? res?.data ?? [];
-      return rooms.filter((r) => !r.isDeleted);
+      return rooms.filter(r => !r.isDeleted);
+
     } catch (err) {
       console.error('[ChatService] loadRooms:', err);
       return [];
@@ -101,9 +76,9 @@ export class ChatService {
   async getRoom(roomId: string): Promise<Conversation | null> {
     try {
       const res = await firstValueFrom(
-        this.http.get<{ data: any }>(`${BASE}/chat/rooms/${roomId}`),
+        this.http.get<{ data: any }>(`${BASE}/chat/rooms/${roomId}`)
       );
-      return res?.data?.room ?? res?.data ?? null;
+      return res?.data?.room ?? null;
     } catch {
       return null;
     }
@@ -112,23 +87,24 @@ export class ChatService {
   async getUnreadCounts(): Promise<Record<string, number>> {
     try {
       const res = await firstValueFrom(
-        this.http.get<{ data: any }>(`${BASE}/chat/rooms/unread-counts`),
+        this.http.get<{ data: any }>(`${BASE}/chat/rooms/unread-counts`)
       );
-      return res?.data ?? {};
+      // Response: { data: { counts: { roomId: number }, totalUnread } }
+      return res?.data?.counts ?? {};
     } catch {
       return {};
     }
   }
 
+  // ✅ FIX: الباك بياخد { targetUserId }
   async createDM(targetUserId: string): Promise<Conversation | null> {
     try {
       const res = await firstValueFrom(
         this.http.post<{ data: any }>(`${BASE}/chat/rooms/direct`, {
-          memberId: targetUserId,
-          organizationId: this.orgId || undefined,
-        }),
+          targetUserId, // ✅ الاسم الصح
+        })
       );
-      return res?.data?.room ?? res?.data ?? null;
+      return res?.data?.room ?? null;
     } catch (err: any) {
       console.error('[ChatService] createDM:', err?.error?.message);
       return null;
@@ -142,9 +118,9 @@ export class ChatService {
           name,
           organizationId: this.orgId,
           isPrivate,
-        }),
+        })
       );
-      return res?.data?.room ?? res?.data ?? null;
+      return res?.data?.room ?? null;
     } catch (err: any) {
       console.error('[ChatService] createChannel:', err?.error?.message);
       return null;
@@ -158,9 +134,9 @@ export class ChatService {
           name,
           organizationId: this.orgId,
           memberIds,
-        }),
+        })
       );
-      return res?.data?.room ?? res?.data ?? null;
+      return res?.data?.room ?? null;
     } catch (err: any) {
       console.error('[ChatService] createGroup:', err?.error?.message);
       return null;
@@ -169,21 +145,34 @@ export class ChatService {
 
   async leaveRoom(roomId: string): Promise<boolean> {
     try {
-      await firstValueFrom(this.http.delete(`${BASE}/chat/rooms/${roomId}/leave`));
+      await firstValueFrom(
+        this.http.delete(`${BASE}/chat/rooms/${roomId}/leave`)
+      );
       return true;
     } catch {
       return false;
     }
   }
 
-  // ── Messages ────────────────────────────────────────────
+  // ── Messages ───────────────────────────────────────────────
 
-  async loadMessages(roomId: string, limit = 50, before?: string): Promise<BackendMessage[]> {
+  async loadMessages(
+    roomId: string,
+    limit = 50,
+    before?: string
+  ): Promise<BackendMessage[]> {
     try {
-      let url = `${BASE}/chat/rooms/${roomId}/messages?limit=${limit}`;
-      if (before) url += `&before=${before}`;
-      const res = await firstValueFrom(this.http.get<{ data: any }>(url));
-      return res?.data?.messages ?? res?.data ?? [];
+      const params: any = { limit: String(limit) };
+      if (before) params.before = before;
+
+      const res = await firstValueFrom(
+        this.http.get<{ data: any }>(
+          `${BASE}/chat/rooms/${roomId}/messages`,
+          { params }
+        )
+      );
+      // Response: { data: { messages: [...], total, hasMore } }
+      return res?.data?.messages ?? [];
     } catch (err) {
       console.error('[ChatService] loadMessages:', err);
       return [];
@@ -193,9 +182,10 @@ export class ChatService {
   async searchMessages(roomId: string, query: string): Promise<BackendMessage[]> {
     try {
       const res = await firstValueFrom(
-        this.http.get<{ data: any }>(`${BASE}/chat/rooms/${roomId}/messages/search`, {
-          params: { q: query, page: '1', limit: '20' },
-        }),
+        this.http.get<{ data: any }>(
+          `${BASE}/chat/rooms/${roomId}/messages/search`,
+          { params: { q: query, page: '1', limit: '20' } }
+        )
       );
       return res?.data?.messages ?? [];
     } catch {
@@ -204,28 +194,40 @@ export class ChatService {
   }
 
   async sendMessage(
-    roomId: string,
-    content: string,
+    roomId:      string,
+    content:     string,
     messageType: MsgType = 'text',
-    replyTo?: string,
+    replyTo?:    string,
   ): Promise<BackendMessage | null> {
     try {
       const body: any = { content, messageType };
       if (replyTo) body.replyTo = replyTo;
+
       const res = await firstValueFrom(
-        this.http.post<{ data: any }>(`${BASE}/chat/rooms/${roomId}/messages`, body),
+        this.http.post<{ data: any }>(
+          `${BASE}/chat/rooms/${roomId}/messages`,
+          body
+        )
       );
-      return res?.data?.message ?? res?.data ?? null;
+      // Response: { data: { message: {...} } }
+      return res?.data?.message ?? null;
     } catch (err: any) {
       console.error('[ChatService] sendMessage:', err?.error?.message);
       return null;
     }
   }
 
-  async editMessage(roomId: string, messageId: string, content: string): Promise<boolean> {
+  async editMessage(
+    roomId:    string,
+    messageId: string,
+    content:   string
+  ): Promise<boolean> {
     try {
       await firstValueFrom(
-        this.http.patch(`${BASE}/chat/rooms/${roomId}/messages/${messageId}`, { content }),
+        this.http.patch(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}`,
+          { content }
+        )
       );
       return true;
     } catch {
@@ -233,21 +235,38 @@ export class ChatService {
     }
   }
 
-  async deleteMessage(roomId: string, messageId: string): Promise<boolean> {
+  async deleteMessage(
+    roomId:    string,
+    messageId: string,
+    deleteType: 'me' | 'everyone' = 'everyone'
+  ): Promise<boolean> {
     try {
-      await firstValueFrom(this.http.delete(`${BASE}/chat/rooms/${roomId}/messages/${messageId}`));
+      await firstValueFrom(
+        this.http.delete(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}`,
+          { body: { deleteType } }
+        )
+      );
       return true;
     } catch {
       return false;
     }
   }
 
-  // ── Reactions ───────────────────────────────────────────
+  // ── Reactions ──────────────────────────────────────────────
 
-  async addReaction(roomId: string, messageId: string, emoji: string): Promise<boolean> {
+  // ✅ FIX: الباك بياخد { reaction } مش { emoji }
+  async addReaction(
+    roomId:    string,
+    messageId: string,
+    reaction:  string
+  ): Promise<boolean> {
     try {
       await firstValueFrom(
-        this.http.post(`${BASE}/chat/rooms/${roomId}/messages/${messageId}/reactions`, { emoji }),
+        this.http.post(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}/reactions`,
+          { reaction } // ✅ الاسم الصح
+        )
       );
       return true;
     } catch {
@@ -258,7 +277,9 @@ export class ChatService {
   async removeReaction(roomId: string, messageId: string): Promise<boolean> {
     try {
       await firstValueFrom(
-        this.http.delete(`${BASE}/chat/rooms/${roomId}/messages/${messageId}/reactions`),
+        this.http.delete(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}/reactions`
+        )
       );
       return true;
     } catch {
@@ -266,44 +287,51 @@ export class ChatService {
     }
   }
 
-  // ── Read Receipts ───────────────────────────────────────
+  // ── Read Receipts ──────────────────────────────────────────
 
   async markSeen(roomId: string, messageId: string): Promise<void> {
     try {
       await firstValueFrom(
-        this.http.patch(`${BASE}/chat/rooms/${roomId}/messages/${messageId}/seen`, {}),
+        this.http.patch(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}/seen`,
+          {}
+        )
       );
-    } catch {
-      /* silent */
-    }
+    } catch { /* silent */ }
   }
 
   async markDelivered(roomId: string, messageId: string): Promise<void> {
     try {
       await firstValueFrom(
-        this.http.patch(`${BASE}/chat/rooms/${roomId}/messages/${messageId}/delivered`, {}),
+        this.http.patch(
+          `${BASE}/chat/rooms/${roomId}/messages/${messageId}/delivered`,
+          {}
+        )
       );
-    } catch {
-      /* silent */
-    }
+    } catch { /* silent */ }
   }
 
-  // ── Org Members (for DM/Group pickers) ──────────────────
+  // ── Org Members (for DM/Group pickers) ────────────────────
 
-  async loadOrgMembers(): Promise<{ _id: string; username: string; email: string; image?: any }[]> {
+  async loadOrgMembers(): Promise<
+    { _id: string; username: string; email: string; image?: any }[]
+  > {
     if (!this.orgId) return [];
     try {
       const res = await firstValueFrom(
-        this.http.get<{ data: any }>(`${BASE}/org/${this.orgId}/members?page=1&limit=100`),
+        this.http.get<{ data: any }>(
+          `${BASE}/org/${this.orgId}/members?page=1&limit=100`
+        )
       );
+      // Response: { data: { members: [{ userId: { _id, username, email }, role }] } }
       const members = res?.data?.members ?? [];
       return members
         .filter((m: any) => m.userId)
         .map((m: any) => ({
-          _id: m.userId._id ?? m.userId,
+          _id:      m.userId._id ?? m.userId,
           username: m.userId.username ?? m.userId.email?.split('@')[0] ?? 'Unknown',
-          email: m.userId.email ?? '',
-          image: m.userId.image ?? null,
+          email:    m.userId.email ?? '',
+          image:    m.userId.image ?? null,
         }));
     } catch {
       return [];

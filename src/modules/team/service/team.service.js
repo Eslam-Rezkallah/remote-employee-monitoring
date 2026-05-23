@@ -5,6 +5,8 @@ import teamModel from "../../../DB/Model/team.model.js";
 import memberModel from "../../../DB/Model/member.model.js";
 import userModel, { roleTypes } from "../../../DB/Model/user.model.js";
 import { notificationEvent } from "../../../utils/events/notification.event.js";
+import { ForbiddenError, NotFoundError } from "../../../utils/errors/index.js";
+import { requireOrgAdmin } from "../../../utils/permissions/org.permissions.js";
 
 // ── Shared populate config ────────────────────────────────────
 const teamPopulate = [
@@ -15,10 +17,26 @@ const teamPopulate = [
 ];
 
 // ── Helpers ───────────────────────────────────────────────────
-const isManagerOrAdmin = (team, user) =>
-  team.managers.map((m) => m.toString()).includes(user._id.toString()) ||
-  user.role === roleTypes.Admin;
+// Check if user is team manager OR org admin/owner
+async function isTeamManagerOrOrgAdmin(team, userId) {
+  const isManager = team.managers
+    .map((m) => m.toString())
+    .includes(userId.toString());
 
+  if (isManager) return true;
+
+  // Check if org admin/owner
+  const orgMembership = await dbService.findOne({
+    model: memberModel,
+    filter: {
+      organizationId: team.organizationId,
+      userId,
+      isActive: true,
+    },
+  });
+
+  return orgMembership && ["owner", "admin"].includes(orgMembership.role);
+}
 // FIX: verify the user is an active member of the team's org
 async function requireOrgMember(orgId, userId) {
   const member = await dbService.findOne({
@@ -229,11 +247,9 @@ export const updateTeam = asyncHandler(async (req, res, next) => {
     return next(new Error("Team not found", { cause: 404 }));
   }
 
-  if (!isManagerOrAdmin(team, req.user)) {
-    return next(
-      new Error("Only a team manager or Admin can update team details", {
-        cause: 403,
-      }),
+  if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
+    throw new ForbiddenError(
+      "Only a team manager or org admin can update team details",
     );
   }
 
@@ -271,10 +287,9 @@ export const addMember = asyncHandler(async (req, res, next) => {
   if (!team) {
     return next(new Error("Team not found", { cause: 404 }));
   }
-
-  if (!isManagerOrAdmin(team, req.user)) {
-    return next(
-      new Error("Only a team manager or Admin can add members", { cause: 403 }),
+  if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
+    throw new ForbiddenError(
+      "Only a team manager or org admin can update team details",
     );
   }
 
@@ -348,12 +363,9 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   if (!team) {
     return next(new Error("Team not found", { cause: 404 }));
   }
-
-  if (!isManagerOrAdmin(team, req.user)) {
-    return next(
-      new Error("Only a team manager or Admin can remove members", {
-        cause: 403,
-      }),
+  if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
+    throw new ForbiddenError(
+      "Only a team manager or org admin can update team details",
     );
   }
 
@@ -413,22 +425,14 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 export const addManager = asyncHandler(async (req, res, next) => {
   const { teamId, userId } = req.params;
 
-  if (req.user.role !== roleTypes.Admin) {
-    return next(
-      new Error("Only an Admin can promote a member to manager", {
-        cause: 403,
-      }),
-    );
-  }
-
   const team = await dbService.findOne({
     model: teamModel,
     filter: { _id: teamId, isDeleted: { $ne: true } },
   });
+  if (!team) throw new NotFoundError("Team not found");
 
-  if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
-  }
+  // Org owner/admin only (not system Admin)
+  await requireOrgAdmin(team.organizationId, req.user._id);
 
   const user = await dbService.findOne({
     model: userModel,
@@ -478,20 +482,14 @@ export const addManager = asyncHandler(async (req, res, next) => {
 export const removeManager = asyncHandler(async (req, res, next) => {
   const { teamId, userId } = req.params;
 
-  if (req.user.role !== roleTypes.Admin) {
-    return next(
-      new Error("Only an Admin can demote a manager", { cause: 403 }),
-    );
-  }
-
   const team = await dbService.findOne({
     model: teamModel,
     filter: { _id: teamId, isDeleted: { $ne: true } },
   });
+  if (!team) throw new NotFoundError("Team not found");
 
-  if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
-  }
+  // Org owner/admin only (not system Admin)
+  await requireOrgAdmin(team.organizationId, req.user._id);
 
   if (team.createdBy.toString() === userId) {
     return next(new Error("Cannot demote the team creator", { cause: 400 }));
@@ -534,18 +532,17 @@ export const removeManager = asyncHandler(async (req, res, next) => {
 export const deleteTeam = asyncHandler(async (req, res, next) => {
   const { teamId } = req.params;
 
-  if (req.user.role !== roleTypes.Admin) {
-    return next(new Error("Only an Admin can delete a team", { cause: 403 }));
-  }
-
   const team = await dbService.findOne({
     model: teamModel,
     filter: { _id: teamId, isDeleted: { $ne: true } },
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    throw new NotFoundError("Team not found");
   }
+
+  // Must be org admin or owner of the team's organization
+  await requireOrgAdmin(team.organizationId, req.user._id);
 
   await dbService.findOneAndUpdate({
     model: teamModel,

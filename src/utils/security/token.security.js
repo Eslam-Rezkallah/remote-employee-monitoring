@@ -1,20 +1,50 @@
 import jwt from "jsonwebtoken";
 import userModel, { roleTypes } from "../../DB/Model/user.model.js";
 import * as dbService from "../../DB/db.service.js";
-
+import { UnauthorizedError, ForbiddenError } from "../errors/index.js";
+import { config } from "../../config/index.js";
 export const tokenTypes = {
   access: "access",
   refresh: "refresh",
 };
+export const generateAccessToken = ({
+  payload = {},
+  role = roleTypes.Member,
+} = {}) => {
+  const signature =
+    role === roleTypes.Admin
+      ? config.security.adminAccessSecret
+      : config.security.userAccessSecret;
+
+  return jwt.sign(payload, signature, {
+    expiresIn: config.security.accessTokenExpiration, // "15m"
+  });
+};
+
+/**
+ * Generate a refresh token (long-lived, ~7 days).
+ */
+export const generateRefreshToken = ({
+  payload = {},
+  role = roleTypes.Member,
+} = {}) => {
+  const signature =
+    role === roleTypes.Admin
+      ? config.security.adminRefreshSecret
+      : config.security.userRefreshSecret;
+
+  return jwt.sign(payload, signature, {
+    expiresIn: config.security.refreshTokenExpiration, // "7d"
+  });
+};
 export const decodedToken = async ({
   authorization = "",
   tokenType = tokenTypes.access,
-  next = {},
 } = {}) => {
   const [bearer, token] = authorization?.split(" ") || [];
 
   if (!token) {
-    return next(new Error("Authorization header is missing", 401));
+    throw new UnauthorizedError("Authorization header is missing");
   }
 
   let access_signature = "";
@@ -23,27 +53,27 @@ export const decodedToken = async ({
 
   switch (bearer) {
     case "Bearer":
-      access_signature = process.env.USER_ACCESS_TOKEN;
-      refresh_signature = process.env.USER_REFRESH_TOKEN;
+      access_signature = config.security.userAccessSecret;
+      refresh_signature = config.security.userRefreshSecret;
       allowedRoles = [roleTypes.Member, roleTypes.Manager];
       break;
     case "System":
-      access_signature = process.env.ADMIN_ACCESS_TOKEN;
-      refresh_signature = process.env.ADMIN_REFRESH_TOKEN;
+      access_signature = config.security.adminAccessSecret;
+      refresh_signature = config.security.adminRefreshSecret;
       allowedRoles = [roleTypes.Admin];
       break;
     default:
-      return next(new Error("Invalid token type", 401));
+      throw new UnauthorizedError("Invalid token type");
   }
 
   const decoded = verifyToken({
     token,
     signature:
-      tokenType == tokenTypes.access ? access_signature : refresh_signature,
+      tokenType === tokenTypes.access ? access_signature : refresh_signature,
   });
 
   if (!decoded?.id) {
-    return next(new Error("Invalid token payload", 401));
+    throw new UnauthorizedError("Invalid token payload");
   }
 
   const user = await dbService.findOne({
@@ -52,36 +82,29 @@ export const decodedToken = async ({
   });
 
   if (!user) {
-    return next(new Error("User not found", 401));
+    throw new UnauthorizedError("User not found");
   }
 
   if (!allowedRoles.includes(user.role)) {
-    return next(new Error("Unauthorized role for this token type", 403));
+    throw new ForbiddenError("Unauthorized role for this token type");
   }
 
   if (user?.changeCredentialsTime?.getTime() >= decoded.iat * 1000) {
-    return next(
-      new Error("Credentials changed. Please log in again.", { cause: 401 })
-    );
+    throw new UnauthorizedError("Credentials changed. Please log in again.");
   }
 
   return user;
 };
-
 export const generateToken = ({
   payload = {},
-  signature = process.env.USER_ACCESS_TOKEN,
-  expiresIn = process.env.TOKEN_EXPIRATION,
+  signature = config.security.userAccessSecret,
+  expiresIn = config.security.accessTokenExpiration,
 } = {}) => {
-  const token = jwt.sign(payload, signature, {
-    expiresIn: parseInt(expiresIn),
-  });
-  return token;
+  return jwt.sign(payload, signature, { expiresIn });
 };
 export const verifyToken = ({
   token,
-  signature = process.env.USER_ACCESS_TOKEN,
+  signature = config.security.userAccessSecret,
 } = {}) => {
-  const decoded = jwt.verify(token, signature);
-  return decoded;
+  return jwt.verify(token, signature);
 };

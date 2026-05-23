@@ -1,4 +1,5 @@
 import mongoose, { Schema, model, Types } from "mongoose";
+import { NotificationEntityTypes } from "./constants/entityTypes.js";
 
 // ── Notification Types ────────────────────────────────────────
 export const notificationTypes = {
@@ -24,15 +25,6 @@ export const notificationTypes = {
   // Sprints
   SPRINT_STARTED: "sprint_started",
   SPRINT_CLOSED: "sprint_closed",
-};
-
-// ── Entity Types ──────────────────────────────────────────────
-export const entityTypes = {
-  TASK: "Task",
-  COMMENT: "Comment",
-  PROJECT: "Project",
-  TEAM: "Team",
-  SPRINT: "Sprint",
 };
 
 const notificationSchema = new Schema(
@@ -77,10 +69,9 @@ const notificationSchema = new Schema(
     // What entity this notification links to
     entityType: {
       type: String,
-      enum: Object.values(entityTypes),
+      enum: Object.values(NotificationEntityTypes),
       required: true,
     },
-
     // The ID of that entity — used to build the deep link in the frontend
     entityId: {
       type: Types.ObjectId,

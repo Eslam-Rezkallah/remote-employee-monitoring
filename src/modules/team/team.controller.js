@@ -62,10 +62,16 @@ router.delete(
 );
 
 // ── Managers ──────────────────────────────────────────────────
+router.delete(
+  "/:teamId",
+  authentication(),
+  validation(validators.teamId),
+  teamService.deleteTeam,
+);
+
 router.post(
   "/:teamId/managers/:userId",
   authentication(),
-  authorization([roleTypes.Admin]),
   validation(validators.manageUser),
   teamService.addManager,
 );
@@ -73,18 +79,8 @@ router.post(
 router.delete(
   "/:teamId/managers/:userId",
   authentication(),
-  authorization([roleTypes.Admin]),
   validation(validators.manageUser),
   teamService.removeManager,
-);
-
-// ── Delete ────────────────────────────────────────────────────
-router.delete(
-  "/:teamId",
-  authentication(),
-  authorization([roleTypes.Admin]),
-  validation(validators.teamId),
-  teamService.deleteTeam,
 );
 
 export default router;

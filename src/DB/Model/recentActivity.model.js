@@ -1,13 +1,7 @@
 import mongoose from "mongoose";
 const { Schema, model, Types } = mongoose;
+import { ActivityEntityTypes } from "./constants/entityTypes.js";
 
-export const entityTypes = {
-  Task: "Task",
-  Space: "Space",
-  Sprint: "Sprint",
-  Comment: "Comment",
-  Organization: "Organization",
-};
 
 export const activityActions = {
   Create: "create",
@@ -24,12 +18,17 @@ const recentActivitySchema = new Schema(
   {
     actorId: { type: Types.ObjectId, ref: "User", required: true, index: true },
 
-    orgId: { type: Types.ObjectId, ref: "Organization", required: true, index: true },
+    orgId: {
+      type: Types.ObjectId,
+      ref: "Organization",
+      required: true,
+      index: true,
+    },
     spaceId: { type: Types.ObjectId, ref: "Space", default: null, index: true },
 
     entityType: {
       type: String,
-      enum: Object.values(entityTypes),
+      enum: Object.values(ActivityEntityTypes),
       required: true,
       index: true,
     },
@@ -46,7 +45,7 @@ const recentActivitySchema = new Schema(
 
     isDeleted: { type: Boolean, default: false, index: true },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // =========================

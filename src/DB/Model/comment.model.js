@@ -43,11 +43,10 @@ const commentSchema = new Schema(
 );
 
 // ── Indexes ──────────────────────────────────────────────────
-commentSchema.index({ task: 1, createdAt: 1 });                    // list comments for a task (asc for tree-build)
+commentSchema.index({ task: 1, createdAt: 1 }); // list comments for a task (asc for tree-build)
 commentSchema.index({ task: 1, parentComment: 1, createdAt: 1 }); // threaded replies
-commentSchema.index({ createdBy: 1, createdAt: -1 });              // user's own comments (profile / dashboard)
+commentSchema.index({ createdBy: 1, createdAt: -1 }); // user's own comments (profile / dashboard)
 
-const commentModel =
-  mongoose.models.Comment || model("Comment", commentSchema);
+const commentModel = mongoose.models.Comment || model("Comment", commentSchema);
 
 export default commentModel;

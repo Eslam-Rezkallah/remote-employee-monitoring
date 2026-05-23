@@ -4,7 +4,7 @@ import { decodedToken } from "../utils/security/token.security.js";
 export const authentication = () => {
   return asyncHandler(async (req, res, next) => {
     const { authorization } = req.headers;
-    req.user = await decodedToken({ authorization, next });
+    req.user = await decodedToken({ authorization });
     return next();
   });
 };

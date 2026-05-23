@@ -7,13 +7,14 @@ import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { logActivity } from "../../../utils/activity/activity.logger.js";
-import { activityActions, entityTypes } from "../../../DB/Model/recentActivity.model.js";
-
+import { activityActions } from "../../../DB/Model/recentActivity.model.js";
+import { EntityType } from "../../../DB/Model/constants/entityTypes.js";
 const modelMap = {
   [starredEntityTypes.Task]: Task,
   [starredEntityTypes.Space]: Space,
   [starredEntityTypes.Sprint]: Sprint,
 };
+
 
 const searchableFieldsByType = {
   [starredEntityTypes.Task]: ["title", "description", "labels"],
@@ -90,7 +91,8 @@ export const toggleStar = asyncHandler(async (req, res, next) => {
       actorId: req.user._id,
       orgId,
       spaceId,
-      entityType: entityTypes[entityType] || entityType,
+      entityType: EntityType[entityType] || entityType,
+
       entityId,
       action: activityActions.Unstar,
       meta: {},
@@ -110,7 +112,7 @@ export const toggleStar = asyncHandler(async (req, res, next) => {
     actorId: req.user._id,
     orgId,
     spaceId,
-    entityType: entityTypes[entityType] || entityType,
+    entityType: EntityType[entityType] || entityType,
     entityId,
     action: activityActions.Star,
     meta: {},

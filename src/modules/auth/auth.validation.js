@@ -97,3 +97,9 @@ export const sendConfirmEmail = joi
     email: generalFields.email.required(),
   })
   .required();
+export const refreshToken = joi
+  .object()
+  .keys({
+    refreshToken: joi.string().required(),
+  })
+  .required();

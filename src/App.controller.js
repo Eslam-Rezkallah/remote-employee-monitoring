@@ -15,6 +15,7 @@ import reactionController from "./modules/reaction/reaction.controller.js";
 // NEW: call history REST routes
 import callController from "./modules/call/call.controller.js";
 import inviteController from "./modules/invite/invite.controller.js";
+import { config } from "./config/index.js";
 
 import connectDB from "./DB/connection.js";
 import { globalErrorHandling } from "./utils/response/error.response.js";
@@ -50,8 +51,13 @@ const authLimiter = rateLimit({
 });
 
 // ── Bootstrap ─────────────────────────────────────────────────
-export const bootstrap = async (app, express) => {
-  app.use(cors());
+ const bootstrap = async (app, express) => {
+  app.use(
+    cors({
+      origin: config.app.frontendUrl,
+      credentials: true,
+    }),
+  );
   app.use(helmet());
   app.use("/auth", authLimiter);
   app.use(generalLimiter);

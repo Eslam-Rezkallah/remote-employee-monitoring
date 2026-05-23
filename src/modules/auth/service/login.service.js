@@ -17,15 +17,43 @@ import { generateToken } from "../../../utils/security/token.security.js";
 // SHARED HELPERS  (used by all login flows below)
 // ─────────────────────────────────────────────────────────────
 
-const buildAccessToken = (user) =>
-  generateToken({
+import crypto from "node:crypto";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+} from "../../../utils/security/token.security.js";
+import refreshTokenModel from "../../../DB/Model/refreshToken.model.js";
+import ms from "ms"; // npm install ms
+import { config } from "../../../config/index.js";
+
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const issueTokens = async (user, req) => {
+  const accessToken = generateAccessToken({
     payload: { id: user._id },
-    signature:
-      user.role === roleTypes.Admin
-        ? process.env.ADMIN_ACCESS_TOKEN
-        : process.env.USER_ACCESS_TOKEN,
+    role: user.role,
   });
 
+  const refreshToken = generateRefreshToken({
+    payload: { id: user._id },
+    role: user.role,
+  });
+
+  // Store refresh token hash (so we can revoke it)
+  const expiresAt = new Date(
+    Date.now() + ms(config.security.refreshTokenExpiration),
+  );
+  await refreshTokenModel.create({
+    userId: user._id,
+    tokenHash: hashToken(refreshToken),
+    expiresAt,
+    userAgent: req?.headers?.["user-agent"] || null,
+    ipAddress: req?.ip || null,
+  });
+
+  return { accessToken, refreshToken };
+};
 const buildUserPayload = (user) => ({
   _id: user._id,
   username: user.username,
@@ -138,14 +166,14 @@ export const login = asyncHandler(async (req, res, next) => {
     emailEvent.emit("twoStepVerification", { id: user._id, email });
     return successResponse({ res, data: { requiresOTP: true } });
   }
-
-  return successResponse({
-    res,
-    data: {
-      accessToken: buildAccessToken(user),
-      user: buildUserPayload(user),
-    },
-  });
+const tokens = await issueTokens(user, req);
+return successResponse({
+  res,
+  data: {
+    ...tokens,
+    user: buildUserPayload(user),
+  },
+});
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -186,15 +214,14 @@ export const loginWithGoogle = asyncHandler(async (req, res, next) => {
       }),
     );
   }
-
-  return successResponse({
-    res,
-    message: "Google login successful",
-    data: {
-      accessToken: buildAccessToken(user),
-      user: buildUserPayload(user),
-    },
-  });
+const tokens = await issueTokens(user, req);
+return successResponse({
+  res,
+  data: {
+    ...tokens,
+    user: buildUserPayload(user),
+  },
+});
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -257,14 +284,14 @@ export const validateLoginOTP = asyncHandler(async (req, res, next) => {
       twoStepVerificationOTPBanUntil: null,
     },
   );
-
-  return successResponse({
-    res,
-    data: {
-      accessToken: buildAccessToken(user),
-      user: buildUserPayload(user),
-    },
-  });
+const tokens = await issueTokens(user, req);
+return successResponse({
+  res,
+  data: {
+    ...tokens,
+    user: buildUserPayload(user),
+  },
+});
 });
 
 // ═══════════════════════════════════════════════════════════════

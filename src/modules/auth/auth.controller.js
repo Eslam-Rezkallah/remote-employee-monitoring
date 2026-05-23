@@ -6,6 +6,8 @@ import * as loginService from "./service/login.service.js";
 // FIX: imports from its OWN service folder — NOT from organization module
 import * as organizationService from "./service/organization.service.js";
 import { authentication } from "../../middleware/auth.middleware.js";
+import * as refreshService from "./service/refresh.service.js";
+import * as logoutService from "./service/logout.service.js";
 
 const router = Router();
 
@@ -67,5 +69,24 @@ router.post(
   validation(validators.joinOrganization),
   organizationService.joinOrganizationController,
 );
+// ── Token refresh ─────────────────────────────────────────────
+router.post(
+  "/refresh",
+  validation(validators.refreshToken),
+  refreshService.refreshAccessToken,
+);
 
+// ── Logout ────────────────────────────────────────────────────
+router.post(
+  "/logout",
+  authentication(),
+  validation(validators.refreshToken),
+  logoutService.logout,
+);
+
+router.post(
+  "/logout-all",
+  authentication(),
+  logoutService.logoutAll,
+);
 export default router;

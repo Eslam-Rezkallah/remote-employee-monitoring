@@ -7,23 +7,31 @@ import {
   generateHash,
 } from "../../../utils/security/hash.security.js";
 import { OAuth2Client } from "google-auth-library";
+import {
+  BadRequestError,
+  ConflictError,
+  NotFoundError,
+  UnauthorizedError,
+  TooManyRequestsError,
+} from "../../../utils/errors/index.js";
+import { config } from "../../../config/index.js";
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // SIGNUP
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 export const signup = asyncHandler(async (req, res, next) => {
   const { username, email, password, confirmPassword } = req.body;
 
   if (password !== confirmPassword) {
     return next(
-      new Error("Password and Confirm Password do not match", { cause: 400 }),
+      new BadRequestError("Password and Confirm Password do not match"),
     );
   }
 
   const existing = await userModel.findOne({ email });
   if (existing) {
-    return next(new Error("Email already exists", { cause: 409 }));
+    return next(new ConflictError("Email already exists"));
   }
 
   const user = await userModel.create({
@@ -39,46 +47,43 @@ export const signup = asyncHandler(async (req, res, next) => {
 
   return successResponse({
     res,
-    message: "User registered successfully",
-    data: userObj,
     status: 201,
+    message: "User registered successfully",
+    data: { user: userObj },
   });
 });
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // SIGNUP WITH GOOGLE
-// FIX: was saving "profilePic" which does not exist on the User model.
-//      The model uses "image: { secure_url, public_id }"
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 export const signupWithGoogle = asyncHandler(async (req, res, next) => {
   const { idToken } = req.body;
   if (!idToken) {
-    return next(new Error("ID token is required", { cause: 400 }));
+    return next(new BadRequestError("ID token is required"));
   }
 
   const client = new OAuth2Client();
   const ticket = await client.verifyIdToken({
     idToken,
-    audience: process.env.GOOGLE_CLIENT_ID,
+    audience: config.oauth.googleClientId,
   });
   const payload = ticket.getPayload();
 
   if (!payload.email_verified) {
-    return next(new Error("Email not verified by Google", { cause: 401 }));
+    return next(new UnauthorizedError("Email not verified by Google"));
   }
 
   const existingUser = await userModel.findOne({ email: payload.email });
   if (existingUser) {
     return next(
-      new Error("User already exists. Please login instead.", { cause: 409 }),
+      new ConflictError("User already exists. Please login instead."),
     );
   }
 
   const newUser = await userModel.create({
     email: payload.email,
     username: payload.name,
-    // FIX: correct field name matching the User model schema
     image: payload.picture
       ? { secure_url: payload.picture, public_id: null }
       : undefined,
@@ -91,27 +96,27 @@ export const signupWithGoogle = asyncHandler(async (req, res, next) => {
 
   return successResponse({
     res,
-    message: "Google account registered successfully",
-    data: userObj,
     status: 201,
+    message: "Google account registered successfully",
+    data: { user: userObj },
   });
 });
 
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 // CONFIRM EMAIL
-// ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
 
 export const confirmEmail = asyncHandler(async (req, res, next) => {
   const { email, code } = req.body;
 
   const user = await userModel.findOne({ email });
-  if (!user) return next(new Error("User not found", { cause: 404 }));
+  if (!user) return next(new NotFoundError("User not found"));
 
   if (user.confirmEmail) {
-    return next(new Error("Email already confirmed", { cause: 409 }));
+    return next(new ConflictError("Email already confirmed"));
   }
 
-  // ban expired → reset counters and resend
+  // Ban expired → reset and resend
   if (
     user.confirmEmailOTPBanUntil &&
     user.confirmEmailOTPBanUntil < Date.now()
@@ -129,22 +134,21 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
     );
     emailEvent.emit("sendConfirmationEmail", { id: user._id, email });
     return next(
-      new Error(
-        "Incorrect OTP. A new OTP has been sent to your email. Please check your inbox.",
-        { cause: 401 },
+      new UnauthorizedError(
+        "Incorrect OTP. A new OTP has been sent to your email.",
       ),
     );
   }
 
-  // currently banned
+  // Currently banned
   if (
     user.confirmEmailOTPBanUntil &&
     user.confirmEmailOTPBanUntil > Date.now()
   ) {
     return next(
-      new Error("Your request has been banned. Try again later.", {
-        cause: 429,
-      }),
+      new TooManyRequestsError(
+        "Your request has been banned. Try again later.",
+      ),
     );
   }
 
@@ -152,9 +156,9 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
   if (user.confirmEmailOTPExpires && user.confirmEmailOTPExpires < Date.now()) {
     emailEvent.emit("sendConfirmationEmail", { id: user._id, email });
     return next(
-      new Error("OTP expired. A new OTP has been sent to your email.", {
-        cause: 401,
-      }),
+      new UnauthorizedError(
+        "OTP expired. A new OTP has been sent to your email.",
+      ),
     );
   }
 
@@ -164,7 +168,6 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
 
   if (!otpValid) {
     const nextAttempts = (user.confirmEmailOTPFailedAttempts || 0) + 1;
-
     await userModel.updateOne(
       { email },
       { confirmEmailOTPFailedAttempts: nextAttempts },
@@ -176,23 +179,21 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
         { confirmEmailOTPBanUntil: Date.now() + 300000 },
       );
       return next(
-        new Error(
+        new TooManyRequestsError(
           "Too many failed confirmation attempts. Please try again after 5 minutes.",
-          { cause: 429 },
         ),
       );
     }
 
     emailEvent.emit("sendConfirmationEmail", { id: user._id, email });
     return next(
-      new Error(
-        "Incorrect OTP. A new OTP has been sent to your email. Please check your inbox.",
-        { cause: 401 },
+      new UnauthorizedError(
+        "Incorrect OTP. A new OTP has been sent to your email.",
       ),
     );
   }
 
-  // OTP correct → confirm email and clear OTP fields
+  // OTP correct
   await userModel.updateOne(
     { email },
     {
@@ -209,6 +210,5 @@ export const confirmEmail = asyncHandler(async (req, res, next) => {
   return successResponse({
     res,
     message: "Email confirmed successfully",
-    status: 200,
   });
 });

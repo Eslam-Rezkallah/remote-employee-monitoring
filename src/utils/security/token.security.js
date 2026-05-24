@@ -1,12 +1,15 @@
+// src/utils/security/token.security.js
 import jwt from "jsonwebtoken";
 import userModel, { roleTypes } from "../../DB/Model/user.model.js";
 import * as dbService from "../../DB/db.service.js";
 import { UnauthorizedError, ForbiddenError } from "../errors/index.js";
 import { config } from "../../config/index.js";
+
 export const tokenTypes = {
   access: "access",
   refresh: "refresh",
 };
+
 export const generateAccessToken = ({
   payload = {},
   role = roleTypes.Member,
@@ -17,13 +20,10 @@ export const generateAccessToken = ({
       : config.security.userAccessSecret;
 
   return jwt.sign(payload, signature, {
-    expiresIn: config.security.accessTokenExpiration, // "15m"
+    expiresIn: config.security.accessTokenExpiration,
   });
 };
 
-/**
- * Generate a refresh token (long-lived, ~7 days).
- */
 export const generateRefreshToken = ({
   payload = {},
   role = roleTypes.Member,
@@ -34,34 +34,40 @@ export const generateRefreshToken = ({
       : config.security.userRefreshSecret;
 
   return jwt.sign(payload, signature, {
-    expiresIn: config.security.refreshTokenExpiration, // "7d"
+    expiresIn: config.security.refreshTokenExpiration,
   });
 };
+
 export const decodedToken = async ({
   authorization = "",
   tokenType = tokenTypes.access,
 } = {}) => {
   const [bearer, token] = authorization?.split(" ") || [];
 
-  if (!token) {
+  if (!token || !bearer) {
     throw new UnauthorizedError("Authorization header is missing");
   }
 
-  let access_signature = "";
-  let refresh_signature = "";
+  let accessSignature = "";
+  let refreshSignature = "";
   let allowedRoles = [];
 
   switch (bearer) {
     case "Bearer":
-      access_signature = config.security.userAccessSecret;
-      refresh_signature = config.security.userRefreshSecret;
-      allowedRoles = [roleTypes.Member, roleTypes.Manager];
+      // Bearer = human user tokens (all roles allowed; route-level
+      // authorization() decides what each role can actually do)
+      accessSignature = config.security.userAccessSecret;
+      refreshSignature = config.security.userRefreshSecret;
+      allowedRoles = [roleTypes.Member, roleTypes.Manager, roleTypes.Admin];
       break;
+
     case "System":
-      access_signature = config.security.adminAccessSecret;
-      refresh_signature = config.security.adminRefreshSecret;
+      // System = admin-issued tokens, intended for elevated/system flows
+      accessSignature = config.security.adminAccessSecret;
+      refreshSignature = config.security.adminRefreshSecret;
       allowedRoles = [roleTypes.Admin];
       break;
+
     default:
       throw new UnauthorizedError("Invalid token type");
   }
@@ -69,7 +75,7 @@ export const decodedToken = async ({
   const decoded = verifyToken({
     token,
     signature:
-      tokenType === tokenTypes.access ? access_signature : refresh_signature,
+      tokenType === tokenTypes.access ? accessSignature : refreshSignature,
   });
 
   if (!decoded?.id) {
@@ -86,7 +92,7 @@ export const decodedToken = async ({
   }
 
   if (!allowedRoles.includes(user.role)) {
-    throw new ForbiddenError("Unauthorized role for this token type");
+    throw new ForbiddenError("Token type not permitted for this role");
   }
 
   if (user?.changeCredentialsTime?.getTime() >= decoded.iat * 1000) {
@@ -95,6 +101,7 @@ export const decodedToken = async ({
 
   return user;
 };
+
 export const generateToken = ({
   payload = {},
   signature = config.security.userAccessSecret,
@@ -102,6 +109,7 @@ export const generateToken = ({
 } = {}) => {
   return jwt.sign(payload, signature, { expiresIn });
 };
+
 export const verifyToken = ({
   token,
   signature = config.security.userAccessSecret,

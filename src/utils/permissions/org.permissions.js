@@ -56,4 +56,5 @@ export async function requireOrgOwner(orgId, userId) {
 export function isOrgAdminOrOwner(membership) {
   if (!membership) return false;
   return [memberRoles.Owner, memberRoles.Admin].includes(membership.role);
+  
 }

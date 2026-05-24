@@ -1,3 +1,4 @@
+// src/App.controller.js
 import authController from "./modules/auth/auth.controller.js";
 import userController from "./modules/user/user.controller.js";
 import organizationController from "./modules/organization/organization.controller.js";
@@ -12,7 +13,6 @@ import workSessionController from "./modules/workSession/workSession.controller.
 import chatRoomController from "./modules/chatroom/chat.room.controller.js";
 import messageController from "./modules/message/message.controller.js";
 import reactionController from "./modules/reaction/reaction.controller.js";
-// NEW: call history REST routes
 import callController from "./modules/call/call.controller.js";
 import inviteController from "./modules/invite/invite.controller.js";
 import { config } from "./config/index.js";
@@ -27,31 +27,39 @@ import cors from "cors";
 import path from "node:path";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import { randomUUID } from "node:crypto";
+import { TooManyRequestsError } from "./utils/errors/index.js";
 
-// ── Rate Limiters ─────────────────────────────────────────────
+// ─── Rate Limiters ────────────────────────────────────────────
 const generalLimiter = rateLimit({
   limit: 200,
   windowMs: 2 * 60 * 1000,
-  message: "Too many requests from this IP, please try again later.",
   standardHeaders: "draft-8",
   legacyHeaders: true,
-  statusCode: 429,
-  handler: (req, res, next) => {
-    return next(new Error("Too many requests", { cause: 429 }));
-  },
+  handler: (req, res, next) =>
+    next(new TooManyRequestsError("Too many requests, please try again later")),
 });
 
 const authLimiter = rateLimit({
   limit: 50,
   windowMs: 15 * 60 * 1000,
-  message: "Too many authentication attempts, please try again later.",
-  handler: (req, res, next) => {
-    return next(new Error("Too many authentication attempts", { cause: 429 }));
-  },
+  handler: (req, res, next) =>
+    next(
+      new TooManyRequestsError(
+        "Too many authentication attempts, please try again later",
+      ),
+    ),
 });
 
-// ── Bootstrap ─────────────────────────────────────────────────
- const bootstrap = async (app, express) => {
+// ─── Bootstrap ────────────────────────────────────────────────
+const bootstrap = async (app, express) => {
+  // Request ID for tracing (Phase 2 will wire this to structured logger)
+  app.use((req, res, next) => {
+    req.id = req.headers["x-request-id"] || randomUUID();
+    res.setHeader("x-request-id", req.id);
+    next();
+  });
+
   app.use(
     cors({
       origin: config.app.frontendUrl,
@@ -59,12 +67,25 @@ const authLimiter = rateLimit({
     }),
   );
   app.use(helmet());
+
+  // Body size limit (basic DoS protection)
+  app.use(express.json({ limit: "1mb" }));
+  app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
   app.use("/auth", authLimiter);
   app.use(generalLimiter);
-  app.use(express.json());
   app.use("/uploads", express.static(path.resolve("./src/uploads")));
 
-  // ── Routes ────────────────────────────────────────────────────
+  // ─── Health checks (Phase 2 will expand) ────────────────────
+  app.get("/healthz", (req, res) =>
+    res.status(200).json({
+      success: true,
+      message: "OK",
+      data: { uptime: process.uptime(), timestamp: new Date().toISOString() },
+    }),
+  );
+
+  // ─── Routes ─────────────────────────────────────────────────
   app.use("/auth", authController);
   app.use("/user", userController);
   app.use("/org", organizationController);
@@ -78,7 +99,7 @@ const authLimiter = rateLimit({
   app.use("/work-session", workSessionController);
   app.use("/invite", inviteController);
 
-  // ── Chat ──────────────────────────────────────────────────────
+  // ─── Chat ───────────────────────────────────────────────────
   app.use("/chat/rooms", chatRoomController);
   app.use("/chat/rooms/:roomId/messages", messageController);
   app.use(
@@ -86,19 +107,22 @@ const authLimiter = rateLimit({
     reactionController,
   );
 
-  // ── Calls (REST — history + active check) ─────────────────────
-  // Real-time signaling happens via Socket.IO /call namespace
+  // ─── Calls ──────────────────────────────────────────────────
   app.use("/chat/rooms/:roomId/calls", callController);
 
-  // ── 404 ───────────────────────────────────────────────────────
-  app.all("*", (req, res, next) => {
-    res.status(404).json({ success: false, message: "Page not found" });
+  // ─── 404 ────────────────────────────────────────────────────
+  app.all("*", (req, res) => {
+    res.status(404).json({
+      success: false,
+      message: `Route ${req.method} ${req.originalUrl} not found`,
+      data: null,
+    });
   });
 
-  // ── Error Handler ─────────────────────────────────────────────
+  // ─── Error Handler ──────────────────────────────────────────
   app.use(globalErrorHandling);
 
-  // ── Database + boot hooks ─────────────────────────────────────
+  // ─── DB + boot hooks ────────────────────────────────────────
   await connectDB();
   await recoverOrphanedSessions();
   startIdleDetection();

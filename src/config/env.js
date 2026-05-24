@@ -37,7 +37,11 @@ const envSchema = joi
     // Email
     EMAIL: joi.string().email().required(),
     EMAIL_PASSWORD: joi.string().required(),
-
+    // inside envSchema
+    REDIS_URL: joi
+      .string()
+      .uri({ scheme: ["redis", "rediss"] })
+      .optional(),
     // Cloudinary
     CLOUDINARY_CLOUD_NAME: joi.string().required(),
     CLOUDINARY_API_KEY: joi.string().required(),

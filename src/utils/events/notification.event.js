@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import * as dbService from "../../DB/db.service.js";
 import notificationModel from "../../DB/Model/notification.model.js";
 import { getIo } from "../../modules/socket/socket.controller.js";
+import { getChatNamespace } from "../../modules/socket/socket.controller.js";
 
 export const notificationEvent = new EventEmitter();
 
@@ -48,11 +49,12 @@ const createNotification = async ({
 
     // Emit to the recipient's personal socket room if they are online
     try {
-      const io = getIo();
-      // Frontend must join room `user_<userId>` on connect
-      io.to(`user_${recipientId}`).emit("notification", {
-        notification: populated,
-      });
+     const chatNs = getChatNamespace();
+     if (chatNs) {
+       chatNs.to(`user_${recipientId}`).emit("notification", {
+         notification: populated,
+       });
+     }
     } catch (_) {
       // Socket not initialised or user offline — silently skip
     }

@@ -565,7 +565,19 @@ export const registerCallSocket = (namespace) => {
     // ── DISCONNECT (cleanup) ───────────────────────────────
     socket.on("disconnect", async () => {
       try {
-        // find any active calls this user is in
+        // Check if this user still has OTHER active sockets in the call namespace
+        // before marking them as "left"
+        const otherSockets = await namespace
+          .in(`user_${userId}`)
+          .fetchSockets();
+        const stillConnected = otherSockets.some((s) => s.id !== socket.id);
+
+        if (stillConnected) {
+          // User has another tab/device still in the call — don't mark as left
+          return;
+        }
+
+        // No other sockets — proceed with cleanup
         const activeCalls = await callModel.find({
           "participants.userId": userId,
           "participants.state": "in-call",

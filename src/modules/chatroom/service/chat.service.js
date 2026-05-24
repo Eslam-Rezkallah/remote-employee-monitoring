@@ -12,6 +12,10 @@ import { getChatNamespace } from "../../socket/socket.controller.js";
 import messageModel from "../../../DB/Model/message.model.js";
 import reactionModel from "../../../DB/Model/reaction.model.js";
 import * as dbService from "../../../DB/db.service.js";
+import {
+  forceUserLeaveRoom,
+  forceAllMembersLeaveRoom,
+} from "../../socket/util/socket-room.util.js";
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
@@ -754,7 +758,6 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
   if (room.type === chatRoomTypes.direct) {
     return next(new Error("Cannot leave a direct message", { cause: 400 }));
   }
-
   const isAdmin = room.admins.some((a) => a.toString() === userId.toString());
 
   if (isAdmin && room.admins.length === 1 && room.members.length > 1) {
@@ -769,13 +772,15 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
       });
     }
   }
-
   await dbService.findOneAndUpdate({
     model: chatRoomModel,
     filter: { _id: roomId },
     data: { $pull: { members: userId, admins: userId } },
     options: { new: true },
   });
+
+  // 🆕 The user might have multiple tabs/devices; kick them all
+  await forceUserLeaveRoom(userId, roomId);
 
   return successResponse({ res, message: "Left room successfully" });
 });
@@ -826,7 +831,6 @@ export const addMember = asyncHandler(async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────
 // DELETE /chat/rooms/:roomId/members/:memberId
 // ─────────────────────────────────────────────────────────────
-
 export const removeMember = asyncHandler(async (req, res, next) => {
   const { roomId, memberId } = req.params;
   const userId = req.user._id;
@@ -836,13 +840,17 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
   if (room.type === chatRoomTypes.direct) {
     return next(
-      new Error("Cannot remove members from a direct message", { cause: 400 }),
+      Object.assign(new Error("Cannot remove members from a direct message"), {
+        cause: 400,
+      }),
     );
   }
 
   if (memberId === userId.toString()) {
     return next(
-      new Error("Use the leave endpoint to remove yourself", { cause: 400 }),
+      Object.assign(new Error("Use the leave endpoint to remove yourself"), {
+        cause: 400,
+      }),
     );
   }
 
@@ -853,13 +861,15 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     options: { new: true },
   });
 
+  // 🆕 Socket cleanup: kick removed member's sockets out of the room
+  await forceUserLeaveRoom(memberId, roomId);
+
   return successResponse({ res, message: "Member removed" });
 });
 
 // ─────────────────────────────────────────────────────────────
 // DELETE /chat/rooms/:roomId
 // ─────────────────────────────────────────────────────────────
-
 export const deleteRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
@@ -881,6 +891,9 @@ export const deleteRoom = asyncHandler(async (req, res, next) => {
     filter: { _id: roomId },
     data: { isDeleted: true, deletedAt: new Date() },
   });
+
+  // 🆕 Force all members' sockets out of the room
+  await forceAllMembersLeaveRoom(room.members, roomId);
 
   return successResponse({ res, message: "Room deleted" });
 });

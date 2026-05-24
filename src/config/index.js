@@ -1,8 +1,9 @@
+// src/config/index.js
 import { env } from "./env.js";
 
 /**
  * Centralized config.
- * Always import from here — NEVER read process.env directly in app code.
+ * NEVER read process.env directly outside this file.
  */
 export const config = Object.freeze({
   app: {
@@ -18,15 +19,12 @@ export const config = Object.freeze({
   },
   security: {
     saltRounds: env.SALT,
-    security: {
-      saltRounds: env.SALT,
-      userAccessSecret: env.USER_ACCESS_TOKEN,
-      userRefreshSecret: env.USER_REFRESH_TOKEN,
-      adminAccessSecret: env.ADMIN_ACCESS_TOKEN,
-      adminRefreshSecret: env.ADMIN_REFRESH_TOKEN,
-      accessTokenExpiration: env.ACCESS_TOKEN_EXPIRATION, // "15m"
-      refreshTokenExpiration: env.REFRESH_TOKEN_EXPIRATION, // "7d"
-    },
+    userAccessSecret: env.USER_ACCESS_TOKEN,
+    userRefreshSecret: env.USER_REFRESH_TOKEN,
+    adminAccessSecret: env.ADMIN_ACCESS_TOKEN,
+    adminRefreshSecret: env.ADMIN_REFRESH_TOKEN,
+    accessTokenExpiration: env.ACCESS_TOKEN_EXPIRATION,
+    refreshTokenExpiration: env.REFRESH_TOKEN_EXPIRATION,
   },
   email: {
     user: env.EMAIL,
@@ -43,5 +41,10 @@ export const config = Object.freeze({
   ai: {
     openaiApiKey: env.OPENAI_API_KEY,
     openaiModel: env.OPENAI_MODEL,
+  },
+  // NEW: Redis config (Phase 2 will use)
+  redis: {
+    url: env.REDIS_URL || null,
+    enabled: Boolean(env.REDIS_URL),
   },
 });

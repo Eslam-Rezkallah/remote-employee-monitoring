@@ -1,0 +1,54 @@
+# Source control + IDE noise
+.git
+.gitignore
+.vscode
+.idea
+
+# Local env files — provide via docker run --env-file or compose env
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies — installed inside the image
+node_modules
+
+# Test artifacts
+coverage
+.nyc_output
+tests
+
+# Logs / runtime data
+logs
+*.log
+pids
+*.pid
+*.seed
+src/uploads
+
+# Build outputs (none currently, but reserve the names)
+dist
+build
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Frontend folders are NOT served by this image — exclude them
+FE
+FE_Angular
+
+# Docs are not needed at runtime
+docs
+
+# Python AI services (separate container if/when used)
+ai-services
+
+# Other
+*.bak
+.eslintcache
+.cache
+tmp
+.tmp

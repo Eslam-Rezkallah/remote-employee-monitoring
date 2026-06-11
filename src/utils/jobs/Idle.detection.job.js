@@ -21,6 +21,9 @@ import {
   getAllActive,
   updateSession,
 } from "../cache/session.store.js";
+import { childLogger } from "../logger/logger.js";
+
+const log = childLogger("idle-detection");
 
 /* ── tuneable constants ───────────────────────────────────── */
 export const IDLE_THRESHOLD_SEC       = Number(process.env.IDLE_THRESHOLD_SEC       || 60);
@@ -37,7 +40,7 @@ async function tick() {
   const nowSec     = Math.floor(now / 1000);
   const bulkOps    = [];
 
-  for (const entry of getAllActive()) {
+  for (const entry of await getAllActive()) {
     const {
       sessionId,
       lastActivityAt,
@@ -53,7 +56,7 @@ async function tick() {
 
     /* ── newly idle ─────────────────────────────────────── */
     if (becameIdle) {
-      updateSession(sessionId, {
+      await updateSession(sessionId, {
         isIdle:    true,
         idleSince: lastActivityAt + IDLE_THRESHOLD_SEC * 1000, // exact moment
         dirty:     true,
@@ -79,7 +82,7 @@ async function tick() {
       const delta = newIdleSec - (accruedIdle || 0);
 
       if (delta > 0) {
-        updateSession(sessionId, { accruedIdle: newIdleSec, dirty: true });
+        await updateSession(sessionId, { accruedIdle: newIdleSec, dirty: true });
         bulkOps.push({
           updateOne: {
             filter: { _id: sessionId },
@@ -96,7 +99,7 @@ async function tick() {
     /* ── active: flush heartbeat periodically ───────────── */
     const secSinceHeartbeatFlush = Math.floor((now - (lastHeartbeat || 0)) / 1000);
     if (secSinceHeartbeatFlush >= HEARTBEAT_FLUSH_INTERVAL_SEC) {
-      updateSession(sessionId, { lastHeartbeat: now });
+      await updateSession(sessionId, { lastHeartbeat: now });
       bulkOps.push({
         updateOne: {
           filter: { _id: sessionId },
@@ -112,7 +115,7 @@ async function tick() {
       await workSessionModel.bulkWrite(bulkOps, { ordered: false });
     } catch (err) {
       // Log but do not crash — next tick will retry
-      console.error("[idle-detection] bulkWrite failed:", err.message);
+      log.error({ err, ops: bulkOps.length }, "bulkWrite failed");
     }
   }
 }
@@ -120,8 +123,9 @@ async function tick() {
 /* ── lifecycle ────────────────────────────────────────────── */
 export function startIdleDetection() {
   if (cronHandle) return; // already running
-  console.log(
-    `[idle-detection] started — threshold=${IDLE_THRESHOLD_SEC}s  interval=${CRON_INTERVAL_MS}ms`
+  log.info(
+    { thresholdSec: IDLE_THRESHOLD_SEC, intervalMs: CRON_INTERVAL_MS },
+    "idle detection started",
   );
   cronHandle = setInterval(tick, CRON_INTERVAL_MS);
   // Allow process to exit even if the interval is still running
@@ -171,5 +175,5 @@ export async function recoverOrphanedSessions() {
   }));
 
   await workSessionModel.bulkWrite(bulkOps, { ordered: false });
-  console.log(`[crash-recovery] closed ${orphans.length} orphaned session(s)`);
+  log.warn({ count: orphans.length }, "closed orphaned sessions on recovery");
 }

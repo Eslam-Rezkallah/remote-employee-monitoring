@@ -16,4 +16,26 @@ router.post(
   sprintService.createSprint
 );
 
+// GET /org/:orgId/spaces/:spaceId/sprints
+router.get("/", authentication(), sprintService.listSprints);
+
+// GET /org/:orgId/spaces/:spaceId/sprints/:sprintId
+router.get("/:sprintId", authentication(), sprintService.getSprint);
+
+// PATCH /org/:orgId/spaces/:spaceId/sprints/:sprintId
+router.patch(
+  "/:sprintId",
+  authentication(),
+  activityLogging(),
+  sprintService.updateSprint
+);
+
+// DELETE /org/:orgId/spaces/:spaceId/sprints/:sprintId  (soft)
+router.delete(
+  "/:sprintId",
+  authentication(),
+  activityLogging(),
+  sprintService.deleteSprint
+);
+
 export default router;

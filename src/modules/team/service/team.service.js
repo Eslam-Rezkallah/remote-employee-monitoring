@@ -5,8 +5,14 @@ import teamModel from "../../../DB/Model/team.model.js";
 import memberModel from "../../../DB/Model/member.model.js";
 import userModel, { roleTypes } from "../../../DB/Model/user.model.js";
 import { notificationEvent } from "../../../utils/events/notification.event.js";
-import { ForbiddenError, NotFoundError } from "../../../utils/errors/index.js";
-import { requireOrgAdmin } from "../../../utils/permissions/org.permissions.js";
+import { ForbiddenError, NotFoundError, httpError } from "../../../utils/errors/index.js";
+import {
+  requireOrgAdmin,
+  requireOrgMember,
+} from "../../../utils/permissions/org.permissions.js";
+import { syncTeamChatMembership } from "../../chatroom/service/chat.sync.service.js";
+import { recordAudit } from "../../../utils/audit/audit.logger.js";
+import { auditActions } from "../../../utils/audit/audit.actions.js";
 
 // ── Shared populate config ────────────────────────────────────
 const teamPopulate = [
@@ -37,16 +43,9 @@ async function isTeamManagerOrOrgAdmin(team, userId) {
 
   return orgMembership && ["owner", "admin"].includes(orgMembership.role);
 }
-// FIX: verify the user is an active member of the team's org
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member)
-    throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-}
+// Note: `requireOrgMember` is imported from utils/permissions/org.permissions.js
+// at the top of the file. The local copy that used to live here was removed
+// to eliminate divergent implementations.
 
 // ─────────────────────────────────────────────────────────────
 // CREATE
@@ -68,9 +67,7 @@ export const createTeam = asyncHandler(async (req, res, next) => {
     !["owner", "admin"].includes(orgMembership.role)
   ) {
     return next(
-      new Error("Only org owner/admin or system Admin can create teams", {
-        cause: 403,
-      }),
+      httpError(403, "Only org owner/admin or system Admin can create teams"),
     );
   }
 
@@ -86,10 +83,7 @@ export const createTeam = asyncHandler(async (req, res, next) => {
     });
     if (validMembers.length !== members.length) {
       return next(
-        new Error(
-          "One or more members are not active members of this organization",
-          { cause: 400 },
-        ),
+        httpError(400, "One or more members are not active members of this organization"),
       );
     }
   }
@@ -105,10 +99,7 @@ export const createTeam = asyncHandler(async (req, res, next) => {
     });
     if (validManagers.length !== managers.length) {
       return next(
-        new Error(
-          "One or more managers are not active members of this organization",
-          { cause: 400 },
-        ),
+        httpError(400, "One or more managers are not active members of this organization"),
       );
     }
   }
@@ -215,7 +206,7 @@ export const getTeam = asyncHandler(async (req, res, next) => {
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    return next(httpError(404, "Team not found"));
   }
 
   const isMember = team.members.some(
@@ -224,7 +215,7 @@ export const getTeam = asyncHandler(async (req, res, next) => {
 
   if (req.user.role !== roleTypes.Admin && !isMember) {
     return next(
-      new Error("You do not have access to this team", { cause: 403 }),
+      httpError(403, "You do not have access to this team"),
     );
   }
 
@@ -244,7 +235,7 @@ export const updateTeam = asyncHandler(async (req, res, next) => {
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    return next(httpError(404, "Team not found"));
   }
 
   if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
@@ -285,7 +276,7 @@ export const addMember = asyncHandler(async (req, res, next) => {
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    return next(httpError(404, "Team not found"));
   }
   if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
     throw new ForbiddenError(
@@ -299,7 +290,7 @@ export const addMember = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   // FIX: verify the user is a member of the team's organization
@@ -313,16 +304,14 @@ export const addMember = asyncHandler(async (req, res, next) => {
   });
   if (!orgMember) {
     return next(
-      new Error("User is not a member of this team's organization", {
-        cause: 400,
-      }),
+      httpError(400, "User is not a member of this team's organization"),
     );
   }
 
   const alreadyMember = team.members.map((m) => m.toString()).includes(userId);
   if (alreadyMember) {
     return next(
-      new Error("User is already a member of this team", { cause: 409 }),
+      httpError(409, "User is already a member of this team"),
     );
   }
 
@@ -341,6 +330,11 @@ export const addMember = asyncHandler(async (req, res, next) => {
     teamName: team.name,
     teamId: team._id,
   });
+
+  // Sync the auto-created team chat room (if any) so the new member
+  // appears in the team's chat without a manual addMember call.
+  // Errors are logged inside, never thrown — team add succeeds either way.
+  syncTeamChatMembership(team._id);
 
   return successResponse({
     res,
@@ -361,7 +355,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   });
 
   if (!team) {
-    return next(new Error("Team not found", { cause: 404 }));
+    return next(httpError(404, "Team not found"));
   }
   if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
     throw new ForbiddenError(
@@ -371,15 +365,13 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
   if (team.createdBy.toString() === userId) {
     return next(
-      new Error("Cannot remove the team creator. Delete the team instead.", {
-        cause: 400,
-      }),
+      httpError(400, "Cannot remove the team creator. Delete the team instead."),
     );
   }
 
   const isMember = team.members.map((m) => m.toString()).includes(userId);
   if (!isMember) {
-    return next(new Error("User is not a member of this team", { cause: 404 }));
+    return next(httpError(404, "User is not a member of this team"));
   }
 
   const isManager = team.managers.map((m) => m.toString()).includes(userId);
@@ -388,10 +380,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   if (isManager) {
     if (team.managers.length === 1) {
       return next(
-        new Error(
-          "Cannot remove the only manager. Promote another member first.",
-          { cause: 400 },
-        ),
+        httpError(400, "Cannot remove the only manager. Promote another member first."),
       );
     }
     pullData.$pull.managers = userId;
@@ -412,6 +401,10 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     teamId: team._id,
   });
 
+  // Sync the team chat so the removed member is also dropped from it.
+  // Their open sockets in the room get evicted inside the helper.
+  syncTeamChatMembership(team._id);
+
   return successResponse({
     res,
     message: "Member removed successfully",
@@ -431,8 +424,15 @@ export const addManager = asyncHandler(async (req, res, next) => {
   });
   if (!team) throw new NotFoundError("Team not found");
 
-  // Org owner/admin only (not system Admin)
-  await requireOrgAdmin(team.organizationId, req.user._id);
+  // FIX: was org-admin/owner ONLY, which was inconsistent with
+  // addMember/removeMember (team manager allowed). Slack/Teams
+  // convention: a team manager can promote their own members.
+  // Org admin/owner still allowed via the shared helper.
+  if (!(await isTeamManagerOrOrgAdmin(team, req.user._id))) {
+    throw new ForbiddenError(
+      "Only a team manager or org admin/owner can promote a member to manager",
+    );
+  }
 
   const user = await dbService.findOne({
     model: userModel,
@@ -440,15 +440,13 @@ export const addManager = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   const isMember = team.members.map((m) => m.toString()).includes(userId);
   if (!isMember) {
     return next(
-      new Error("User must be a team member before being promoted to manager", {
-        cause: 400,
-      }),
+      httpError(400, "User must be a team member before being promoted to manager"),
     );
   }
 
@@ -457,7 +455,7 @@ export const addManager = asyncHandler(async (req, res, next) => {
     .includes(userId);
   if (alreadyManager) {
     return next(
-      new Error("User is already a manager of this team", { cause: 409 }),
+      httpError(409, "User is already a manager of this team"),
     );
   }
 
@@ -468,6 +466,9 @@ export const addManager = asyncHandler(async (req, res, next) => {
     options: { new: true },
     populate: teamPopulate,
   });
+
+  // New manager should become an admin of the team chat too.
+  syncTeamChatMembership(team._id);
 
   return successResponse({
     res,
@@ -492,22 +493,19 @@ export const removeManager = asyncHandler(async (req, res, next) => {
   await requireOrgAdmin(team.organizationId, req.user._id);
 
   if (team.createdBy.toString() === userId) {
-    return next(new Error("Cannot demote the team creator", { cause: 400 }));
+    return next(httpError(400, "Cannot demote the team creator"));
   }
 
   const isManager = team.managers.map((m) => m.toString()).includes(userId);
   if (!isManager) {
     return next(
-      new Error("User is not a manager of this team", { cause: 404 }),
+      httpError(404, "User is not a manager of this team"),
     );
   }
 
   if (team.managers.length === 1) {
     return next(
-      new Error(
-        "Team must have at least one manager. Promote another member first.",
-        { cause: 400 },
-      ),
+      httpError(400, "Team must have at least one manager. Promote another member first."),
     );
   }
 
@@ -518,6 +516,9 @@ export const removeManager = asyncHandler(async (req, res, next) => {
     options: { new: true },
     populate: teamPopulate,
   });
+
+  // Demoted manager should lose team-chat admin powers.
+  syncTeamChatMembership(team._id);
 
   return successResponse({
     res,
@@ -548,6 +549,16 @@ export const deleteTeam = asyncHandler(async (req, res, next) => {
     model: teamModel,
     filter: { _id: teamId },
     data: { isDeleted: true, deletedAt: Date.now() },
+  });
+
+  await recordAudit({
+    req,
+    actorId: req.user._id,
+    orgId: team.organizationId,
+    action: auditActions.TEAM_DELETE,
+    targetType: "Team",
+    targetId: team._id,
+    meta: { name: team.name, members: team.members?.length || 0 },
   });
 
   return successResponse({ res, message: "Team deleted successfully" });

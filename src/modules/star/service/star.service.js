@@ -2,13 +2,14 @@ import StarredItem, { starredEntityTypes } from "../../../DB/Model/starredItem.m
 import Task from "../../../DB/Model/task.model.js";
 import Space from "../../../DB/Model/space.model.js";
 import Sprint from "../../../DB/Model/sprint.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { logActivity } from "../../../utils/activity/activity.logger.js";
 import { activityActions } from "../../../DB/Model/recentActivity.model.js";
 import { EntityType } from "../../../DB/Model/constants/entityTypes.js";
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 const modelMap = {
   [starredEntityTypes.Task]: Task,
   [starredEntityTypes.Space]: Space,
@@ -21,14 +22,6 @@ const searchableFieldsByType = {
   [starredEntityTypes.Space]: ["name", "type"],
   [starredEntityTypes.Sprint]: ["name", "goal", "status"],
 };
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-}
 
 function escapeRegex(text = "") {
   return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -67,10 +60,10 @@ export const toggleStar = asyncHandler(async (req, res, next) => {
   const { orgId, entityType, entityId, spaceId } = req.body;
 
   if (!orgId || !entityType || !entityId) {
-    return next(new Error("orgId, entityType, entityId are required", { cause: 400 }));
+    return next(httpError(400, "orgId, entityType, entityId are required"));
   }
   if (!Object.values(starredEntityTypes).includes(entityType)) {
-    return next(new Error("Invalid entityType", { cause: 400 }));
+    return next(httpError(400, "Invalid entityType"));
   }
 
   await requireOrgMember(orgId, req.user._id);
@@ -78,7 +71,7 @@ export const toggleStar = asyncHandler(async (req, res, next) => {
   // ensure entity exists
   const Model = modelMap[entityType];
   const exists = await dbService.findOne({ model: Model, filter: { _id: entityId, isDeleted: false } });
-  if (!exists) return next(new Error("Entity not found", { cause: 404 }));
+  if (!exists) return next(httpError(404, "Entity not found"));
 
   const found = await StarredItem.findOne({ userId: req.user._id, entityType, entityId });
 
@@ -124,7 +117,7 @@ export const toggleStar = asyncHandler(async (req, res, next) => {
 export const listStars = asyncHandler(async (req, res, next) => {
   const { orgId, entityType, limit = 50 } = req.query;
 
-  if (!orgId) return next(new Error("orgId is required", { cause: 400 }));
+  if (!orgId) return next(httpError(400, "orgId is required"));
   await requireOrgMember(orgId, req.user._id);
 
   const filter = { userId: req.user._id, orgId };
@@ -142,9 +135,9 @@ export const listStars = asyncHandler(async (req, res, next) => {
 export const searchStars = asyncHandler(async (req, res, next) => {
   const { orgId, q = "", entityType, page = 1, limit = 20 } = req.query;
 
-  if (!orgId) return next(new Error("orgId is required", { cause: 400 }));
+  if (!orgId) return next(httpError(400, "orgId is required"));
   if (entityType && !Object.values(starredEntityTypes).includes(entityType)) {
-    return next(new Error("Invalid entityType", { cause: 400 }));
+    return next(httpError(400, "Invalid entityType"));
   }
 
   await requireOrgMember(orgId, req.user._id);

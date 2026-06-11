@@ -129,11 +129,20 @@ const userSchema = new Schema(
 
     // Security
     changeCredentialsTime: Date,
+
+    // ── Brute-force lockout ─────────────────────────────────
+    // Counts consecutive failed password attempts. Reset to 0 on a
+    // successful login. Once it crosses LOGIN_MAX_ATTEMPTS we set
+    // loginLockedUntil and reject further attempts with 429 until
+    // the lockout window expires. Tunables live in the login service.
+    loginFailedAttempts: { type: Number, default: 0 },
+    loginLockedUntil: { type: Date, default: null },
+
     isDeleted: {
       type: Boolean,
       default: false,
     },
-    
+
   },
   {
     timestamps: true,
@@ -147,8 +156,10 @@ userSchema.virtual("fullName").get(function () {
   return this.username;
 });
 
-// Index for performance
-userSchema.index({ email: 1 });
+// Index for performance.
+// NOTE: { email: 1 } is NOT redeclared here — the `unique: true` on the
+// email field already creates a unique index. Declaring it again caused
+// Mongoose's "duplicate index" warning at boot.
 userSchema.index({ username: 1 });
 userSchema.index({ teams: 1 });
 userSchema.index({ role: 1 });

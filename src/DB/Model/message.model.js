@@ -75,6 +75,38 @@ const messageSchema = new Schema(
 
     reactions: [{ type: Types.ObjectId, ref: "MessageReaction" }],
 
+    // ── Mentions (Slack-style @username) ────────────────────────
+    // Extracted from `content` at create/edit time. Used for the
+    // mention notification fan-out (notification.event listener).
+    mentions: [{ type: Types.ObjectId, ref: "User" }],
+
+    // ── Threading ───────────────────────────────────────────────
+    // `replyTo` (above) IS the thread parent — Slack-style. To make
+    // "show thread" listings fast we cache the reply count on the
+    // parent so the UI doesn't need to recount on every render.
+    replyCount: { type: Number, default: 0, min: 0 },
+
+    // ── Pinning ─────────────────────────────────────────────────
+    // null when not pinned. Only one entry per message: a message is
+    // either pinned (in the room) or not. Track who/when so the UI
+    // can show "pinned by X".
+    pinnedBy: { type: Types.ObjectId, ref: "User", default: null },
+    pinnedAt: { type: Date, default: null },
+
+    // ── Link preview (unfurl) ───────────────────────────────────
+    // Populated asynchronously by the unfurl service after the message
+    // is saved. The client should re-render the message when the
+    // preview shows up (typically <1s after send).
+    preview: {
+      url: { type: String, default: null },
+      title: { type: String, default: null },
+      description: { type: String, default: null },
+      image: { type: String, default: null },
+      siteName: { type: String, default: null },
+      type: { type: String, default: null },
+      fetchedAt: { type: Date, default: null },
+    },
+
     deliveredTo: [deliveredToSchema],
     seenBy: [seenBySchema],
 
@@ -112,6 +144,18 @@ messageSchema.index({
   senderId: 1,
   createdAt: -1,
 });
+
+// Pinned messages — fast listing per room
+messageSchema.index(
+  { chatRoomId: 1, pinnedAt: -1 },
+  { partialFilterExpression: { pinnedBy: { $type: "objectId" } } },
+);
+
+// Mentions inbox — find every message that mentions a given user
+messageSchema.index({ mentions: 1, createdAt: -1 });
+
+// Thread listing — replies under a parent
+messageSchema.index({ replyTo: 1, createdAt: 1 });
 
 const messageModel = mongoose.models.Message || model("Message", messageSchema);
 

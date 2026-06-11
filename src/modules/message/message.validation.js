@@ -79,3 +79,59 @@ export const searchMessages = joi
     limit: joi.number().integer().min(1).max(50).default(20),
   })
   .required();
+
+// ── Pin / Unpin / List pinned ────────────────────────────────
+export const pinParams = joi
+  .object({
+    roomId: id.label("roomId"),
+    messageId: id.label("messageId"),
+  })
+  .required();
+
+export const listPinned = joi
+  .object({ roomId: id.label("roomId") })
+  .required();
+
+// ── Save / Unsave ────────────────────────────────────────────
+export const saveMessage = joi
+  .object({
+    roomId: id.label("roomId"),
+    messageId: id.label("messageId"),
+    note: joi.string().trim().max(500).allow("", null),
+  })
+  .required();
+
+// ── Thread ───────────────────────────────────────────────────
+export const listThread = joi
+  .object({
+    roomId: id.label("roomId"),
+    messageId: id.label("messageId"),
+    page: joi.number().integer().min(1).default(1),
+    limit: joi.number().integer().min(1).max(100).default(30),
+  })
+  .required();
+
+// ── Scheduled messages ───────────────────────────────────────
+export const scheduleMessage = joi
+  .object({
+    roomId: id.label("roomId"),
+    content: joi.string().trim().min(1).max(5000).required(),
+    sendAt: joi.date().iso().greater("now").required(),
+    replyTo: optionalId,
+    messageType: joi
+      .string()
+      .valid("text", "image", "voice", "file", "system")
+      .default("text"),
+  })
+  .required();
+
+export const cancelScheduled = joi
+  .object({
+    roomId: id.label("roomId"),
+    scheduledId: id.label("scheduledId"),
+  })
+  .required();
+
+export const listScheduled = joi
+  .object({ roomId: id.label("roomId") })
+  .required();

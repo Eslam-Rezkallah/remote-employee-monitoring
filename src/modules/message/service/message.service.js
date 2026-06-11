@@ -25,6 +25,7 @@ import {
   markMessagesSeen,
   forwardMessage,
 } from "./shared.message.service.js";
+import { invalidate, ckey } from "../../../utils/cache/cache.service.js";
 
 // ─────────────────────────────────────────────────────────────
 // SOCKET HELPER
@@ -146,10 +147,14 @@ export const listMessages = asyncHandler(async (req, res, next) => {
 
   messages.reverse();
 
+  // Decorate each message with a compact read-receipt summary so the FE
+  // can render the Slack-style "✓" / "✓✓" dot without recomputing.
+  const decorated = await decorateWithReadReceipts(messages, roomId, userId);
+
   return successResponse({
     res,
     data: {
-      messages,
+      messages: decorated,
       total,
       page,
       limit,
@@ -157,6 +162,51 @@ export const listMessages = asyncHandler(async (req, res, next) => {
     },
   });
 });
+
+/**
+ * Add a `readReceipt` summary to every message in the list:
+ *   - totalRecipients : room members count minus the sender
+ *   - readCount       : how many of them appear in seenBy
+ *   - isFullyRead     : readCount >= totalRecipients (the double-dot)
+ *   - readByMe        : whether the current user has read it
+ *
+ * Shape designed so the FE can render with a single ternary, no need
+ * to walk arrays client-side. Per-room member count is fetched ONCE
+ * and reused across every message in the batch.
+ */
+async function decorateWithReadReceipts(messages, roomId, userId) {
+  if (!messages.length) return messages;
+  const room = await chatRoomModel
+    .findById(roomId)
+    .select("members")
+    .lean();
+  const memberCount = room?.members?.length || 1;
+  const uidStr = String(userId);
+
+  return messages.map((msg) => {
+    const senderStr = String(msg.senderId?._id || msg.senderId);
+    const seenBy = msg.seenBy || [];
+    const readCount = seenBy.filter(
+      (s) => String(s.userId) !== senderStr,
+    ).length;
+    // Recipients = everyone in the room EXCEPT the sender.
+    const totalRecipients = Math.max(0, memberCount - 1);
+    const readByMe =
+      senderStr === uidStr ||
+      seenBy.some((s) => String(s.userId) === uidStr);
+
+    return {
+      ...msg,
+      readReceipt: {
+        totalRecipients,
+        readCount,
+        isFullyRead:
+          totalRecipients > 0 && readCount >= totalRecipients,
+        readByMe,
+      },
+    };
+  });
+}
 
 // ─────────────────────────────────────────────────────────────
 // GET /chat/rooms/:roomId/messages/search
@@ -206,44 +256,54 @@ export const searchMessages = asyncHandler(async (req, res, next) => {
 // GET /chat/rooms/unread-counts
 // ─────────────────────────────────────────────────────────────
 
-export const getUnreadCounts = asyncHandler(async (req, res, next) => {
+export const getUnreadCounts = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  const rooms = await chatRoomModel
-    .find({ members: userId, isDeleted: false })
-    .select("_id")
-    .lean();
+  const result = await cached(
+    ckey("unread-counts", userId),
+    30, // 30s TTL
+    async () => {
+      const rooms = await chatRoomModel
+        .find({ members: userId, isDeleted: false })
+        .select("_id")
+        .lean();
 
-  const roomIds = rooms.map((r) => r._id);
+      const roomIds = rooms.map((r) => r._id);
 
-  const unreadCounts = await messageModel.aggregate([
-    {
-      $match: {
-        chatRoomId: { $in: roomIds },
-        deletedForEveryone: false,
-        deletedFor: { $ne: userId },
-        senderId: { $ne: userId },
-        "seenBy.userId": { $ne: userId },
-      },
+      if (!roomIds.length) {
+        return { counts: {}, totalUnread: 0 };
+      }
+
+      const unreadCounts = await messageModel.aggregate([
+        {
+          $match: {
+            chatRoomId: { $in: roomIds },
+            deletedForEveryone: false,
+            deletedFor: { $ne: userId },
+            senderId: { $ne: userId },
+            "seenBy.userId": { $ne: userId },
+          },
+        },
+        {
+          $group: {
+            _id: "$chatRoomId",
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const counts = {};
+      for (const item of unreadCounts) {
+        counts[item._id.toString()] = item.count;
+      }
+      const totalUnread = unreadCounts.reduce((s, i) => s + i.count, 0);
+
+      return { counts, totalUnread };
     },
-    {
-      $group: {
-        _id: "$chatRoomId",
-        count: { $sum: 1 },
-      },
-    },
-  ]);
+  );
 
-  const counts = {};
-  for (const item of unreadCounts) {
-    counts[item._id.toString()] = item.count;
-  }
-
-  const totalUnread = unreadCounts.reduce((sum, item) => sum + item.count, 0);
-
-  return successResponse({ res, data: { counts, totalUnread } });
+  return successResponse({ res, data: result });
 });
-
 // ─────────────────────────────────────────────────────────────
 // PATCH /:messageId  — Edit
 // ─────────────────────────────────────────────────────────────

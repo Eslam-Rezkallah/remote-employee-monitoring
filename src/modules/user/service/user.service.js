@@ -8,6 +8,7 @@ import {
   generateHash,
 } from "../../../utils/security/hash.security.js";
 import { cloud } from "../../../utils/multer/cloudinary.multer.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // Get user profile
 export const profile = asyncHandler(async (req, res, next) => {
@@ -35,7 +36,7 @@ export const profile = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   return successResponse({ res, data: { user } });
@@ -58,7 +59,7 @@ export const shareProfile = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   // Send email notification to the profile owner
@@ -79,7 +80,7 @@ export const shareProfile = asyncHandler(async (req, res, next) => {
 // Update profile image
 export const updateProfileImage = asyncHandler(async (req, res, next) => {
   if (!req.file) {
-    return next(new Error("No file uploaded", { cause: 400 }));
+    return next(httpError(400, "No file uploaded"));
   }
 
   // Upload to Cloudinary
@@ -129,7 +130,7 @@ export const updateProfile = asyncHandler(async (req, res, next) => {
     });
 
     if (existingUser) {
-      return next(new Error("Username already taken", { cause: 409 }));
+      return next(httpError(409, "Username already taken"));
     }
   }
 
@@ -165,7 +166,7 @@ export const updateEmail = asyncHandler(async (req, res, next) => {
   });
 
   if (existingUser) {
-    return next(new Error("Email already exists", { cause: 409 }));
+    return next(httpError(409, "Email already exists"));
   }
 
   // Store temporary email
@@ -210,7 +211,7 @@ export const resetEmail = asyncHandler(async (req, res, next) => {
       hashValue: user.confirmEmailOTP,
     })
   ) {
-    return next(new Error("Invalid code for old email", { cause: 400 }));
+    return next(httpError(400, "Invalid code for old email"));
   }
 
   // Verify new email code
@@ -221,7 +222,7 @@ export const resetEmail = asyncHandler(async (req, res, next) => {
       hashValue: user.tempEmailOTP,
     })
   ) {
-    return next(new Error("Invalid code for new email", { cause: 400 }));
+    return next(httpError(400, "Invalid code for new email"));
   }
 
   // Update email
@@ -259,7 +260,7 @@ export const updatePassword = asyncHandler(async (req, res, next) => {
 
   // Verify old password
   if (!compareHash({ plainText: oldPassword, hashValue: user.password })) {
-    return next(new Error("Old password is incorrect", { cause: 400 }));
+    return next(httpError(400, "Old password is incorrect"));
   }
 
   // Update password
@@ -282,8 +283,6 @@ export const updatePassword = asyncHandler(async (req, res, next) => {
 export const enableTwoStepVerification = asyncHandler(
   async (req, res, next) => {
     const { email } = req.body;
-console.log(req.user);
-console.log(email);
 
     const user = await dbService.findOne({
       model: userModel,
@@ -292,13 +291,13 @@ console.log(email);
 
     if (!user) {
       return next(
-        new Error("User not found or email mismatch", { cause: 404 }),
+        httpError(404, "User not found or email mismatch"),
       );
     }
 
     if (user.twoStepVerification) {
       return next(
-        new Error("Two-step verification is already enabled", { cause: 400 }),
+        httpError(400, "Two-step verification is already enabled"),
       );
     }
 
@@ -308,10 +307,7 @@ console.log(email);
       user.twoStepVerificationOTPExpires > Date.now()
     ) {
       return next(
-        new Error(
-          "OTP already sent. Please wait before requesting a new one.",
-          { cause: 429 },
-        ),
+        httpError(429, "OTP already sent. Please wait before requesting a new one."),
       );
     }
 
@@ -337,13 +333,13 @@ export const disabledTwoStepVerification = asyncHandler(
 
     if (!user) {
       return next(
-        new Error("User not found or email mismatch", { cause: 404 }),
+        httpError(404, "User not found or email mismatch"),
       );
     }
 
     if (!user.twoStepVerification) {
       return next(
-        new Error("Two-step verification is already disabled", { cause: 400 }),
+        httpError(400, "Two-step verification is already disabled"),
       );
     }
 
@@ -375,17 +371,17 @@ export const changeRoles = asyncHandler(async (req, res, next) => {
 
   // Only admin can change roles
   if (req.user.role !== roleTypes.Admin) {
-    return next(new Error("Only admins can change user roles", { cause: 403 }));
+    return next(httpError(403, "Only admins can change user roles"));
   }
 
   // Validate role
   if (!Object.values(roleTypes).includes(role)) {
-    return next(new Error("Invalid role", { cause: 400 }));
+    return next(httpError(400, "Invalid role"));
   }
 
   // Cannot change own role
   if (userId === req.user._id.toString()) {
-    return next(new Error("Cannot change your own role", { cause: 400 }));
+    return next(httpError(400, "Cannot change your own role"));
   }
 
   const user = await dbService.findByIdAndUpdate({
@@ -397,7 +393,7 @@ export const changeRoles = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   return successResponse({
@@ -488,7 +484,7 @@ export const getProjectMembers = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   const members = [];
@@ -517,7 +513,7 @@ export const toggleReadReceipts = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
-    return next(new Error("User not found", { cause: 404 }));
+    return next(httpError(404, "User not found"));
   }
 
   return successResponse({

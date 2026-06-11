@@ -17,6 +17,7 @@ import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { sendOrganizationInvitationEmail } from "../../../utils/email/invitation.email.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 const hashToken = (token) =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -29,11 +30,9 @@ async function requireOrgRole({ orgId, userId, roles }) {
     filter: { organizationId: orgId, userId, isActive: true },
   });
   if (!member)
-    throw new Error("You are not a member of this organization", {
-      cause: 403,
-    });
+    throw httpError(403, "You are not a member of this organization");
   if (!roles.includes(member.role))
-    throw new Error("Not authorized", { cause: 403 });
+    throw httpError(403, "Not authorized");
   return member;
 }
 
@@ -54,7 +53,7 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
     model: organizationModel,
     filter: { _id: orgId, isDeleted: false, isActive: true },
   });
-  if (!org) return next(new Error("Organization not found", { cause: 404 }));
+  if (!org) return next(httpError(404, "Organization not found"));
 
   const normalizedEmail = email.toLowerCase();
 
@@ -74,7 +73,7 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
     });
     if (activeMembership) {
       return next(
-        new Error("User is already an active member", { cause: 409 }),
+        httpError(409, "User is already an active member"),
       );
     }
   }
@@ -92,11 +91,11 @@ export const createInvitation = asyncHandler(async (req, res, next) => {
 
   if (existingPending) {
     return next(
-      new Error(
+      httpError(
+        409,
         "An active invitation already exists for this email. " +
           "It expires at " +
           existingPending.expiresAt.toISOString(),
-        { cause: 409 },
       ),
     );
   }

@@ -36,19 +36,12 @@ import {
   updateSession,
 } from "../../../utils/cache/session.store.js";
 import { IDLE_THRESHOLD_SEC } from "../../../utils/jobs/idle.detection.job.js";
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 /* ═══════════════════════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════════════════════ */
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model:  memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-}
 
 /** Fetch the current user's active OR paused session from DB */
 async function findRunningSession(userId, orgId) {
@@ -63,9 +56,9 @@ async function findRunningSession(userId, orgId) {
  * Build the in-memory cache entry for a session.
  * Called after start and resume.
  */
-function cacheSession(session) {
+async function cacheSession(session) {
   const now = Date.now();
-  setSession(session._id, {
+  await setSession(session._id, {
     sessionId:      String(session._id),
     userId:         String(session.userId),
     lastActivityAt: now,
@@ -83,7 +76,7 @@ function cacheSession(session) {
  */
 async function finalizeAndSave(session, extraFields = {}) {
   // Merge any in-memory idle seconds that haven't been flushed yet
-  const cached = getSession(session._id);
+  const cached = await getSession(session._id);
   if (cached && cached.accruedIdle > 0) {
     const delta = cached.accruedIdle - (session.idleSeconds || 0);
     if (delta > 0) session.idleSeconds += delta;
@@ -110,12 +103,12 @@ export const startSession = asyncHandler(async (req, res, next) => {
   const existing = await findRunningSession(userId, orgId);
   if (existing) {
     return next(
-      new Error(
+      httpError(
+        409,
         existing.status === SESSION_STATUS.ACTIVE
           ? "You already have an active session. Stop or pause it first."
           : "You have a paused session. Resume or stop it first.",
-        { cause: 409 }
-      )
+      ),
     );
   }
 
@@ -133,7 +126,7 @@ export const startSession = asyncHandler(async (req, res, next) => {
   });
 
   // Seed the in-memory cache
-  cacheSession(session);
+  await cacheSession(session);
 
   return successResponse({
     res,
@@ -153,10 +146,10 @@ export const pauseSession = asyncHandler(async (req, res, next) => {
   const session = await findRunningSession(userId, orgId);
 
   if (!session) {
-    return next(new Error("No active session found", { cause: 404 }));
+    return next(httpError(404, "No active session found"));
   }
   if (session.status === SESSION_STATUS.PAUSED) {
-    return next(new Error("Session is already paused", { cause: 409 }));
+    return next(httpError(409, "Session is already paused"));
   }
 
   const now = new Date();
@@ -166,7 +159,7 @@ export const pauseSession = asyncHandler(async (req, res, next) => {
   if (note) session.note = note;
 
   // Flush accrued idle from memory before pausing
-  const cached = getSession(session._id);
+  const cached = await getSession(session._id);
   if (cached && cached.accruedIdle > 0) {
     const delta = cached.accruedIdle - (session.idleSeconds || 0);
     if (delta > 0) session.idleSeconds += delta;
@@ -180,7 +173,7 @@ export const pauseSession = asyncHandler(async (req, res, next) => {
   await session.save();
 
   // Remove from active-tracking cache (paused sessions don't accumulate idle)
-  removeSession(session._id);
+  await removeSession(session._id);
 
   return successResponse({
     res,
@@ -199,10 +192,10 @@ export const resumeSession = asyncHandler(async (req, res, next) => {
   const session = await findRunningSession(userId, orgId);
 
   if (!session) {
-    return next(new Error("No paused session found", { cause: 404 }));
+    return next(httpError(404, "No paused session found"));
   }
   if (session.status === SESSION_STATUS.ACTIVE) {
-    return next(new Error("Session is already active", { cause: 409 }));
+    return next(httpError(409, "Session is already active"));
   }
 
   const now = new Date();
@@ -222,7 +215,7 @@ export const resumeSession = asyncHandler(async (req, res, next) => {
   await session.save();
 
   // Re-seed the in-memory cache
-  cacheSession(session);
+  await cacheSession(session);
 
   return successResponse({
     res,
@@ -241,7 +234,7 @@ export const stopSession = asyncHandler(async (req, res, next) => {
   const session = await findRunningSession(userId, orgId);
 
   if (!session) {
-    return next(new Error("No active or paused session to stop", { cause: 404 }));
+    return next(httpError(404, "No active or paused session to stop"));
   }
 
   const now = new Date();
@@ -261,7 +254,7 @@ export const stopSession = asyncHandler(async (req, res, next) => {
   });
 
   // Evict from in-memory cache
-  removeSession(session._id);
+  await removeSession(session._id);
 
   return successResponse({
     res,
@@ -288,23 +281,23 @@ export const logActivity = asyncHandler(async (req, res, next) => {
   await requireOrgMember(orgId, userId);
 
   // 1. Check in-memory cache first (fast path)
-  let cached = getByUserId(userId);
+  let cached = await getByUserId(userId);
 
   if (!cached) {
     // Cache miss — the server may have restarted; reload from DB
     const session = await findRunningSession(userId, orgId);
     if (!session || session.status !== SESSION_STATUS.ACTIVE) {
-      return next(new Error("No active session to record activity for", { cause: 404 }));
+      return next(httpError(404, "No active session to record activity for"));
     }
-    cacheSession(session);
-    cached = getSession(session._id);
+    await cacheSession(session);
+    cached = await getSession(session._id);
   }
 
   const now = Date.now();
   const wasIdle = cached.isIdle;
 
   // 2. Update in-memory state
-  updateSession(cached.sessionId, {
+  await updateSession(cached.sessionId, {
     lastActivityAt: now,
     isIdle:         false,
     idleSince:      null,
@@ -369,9 +362,9 @@ export const getMySessions = asyncHandler(async (req, res, next) => {
   ]);
 
   // For any ACTIVE session, inject the live in-memory data
-  const enriched = items.map((s) => {
+  const enriched = await Promise.all(items.map(async (s) => {
     if (s.status !== SESSION_STATUS.ACTIVE) return s;
-    const cached = getSession(s._id);
+    const cached = await getSession(s._id);
     if (!cached) return s;
     return {
       ...s,
@@ -380,7 +373,7 @@ export const getMySessions = asyncHandler(async (req, res, next) => {
       // live wall-clock total
       liveSeconds: Math.floor((Date.now() - new Date(s.startTime)) / 1000),
     };
-  });
+  }));
 
   return successResponse({
     res,

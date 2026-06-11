@@ -15,6 +15,23 @@ const chatRoomSchema = new Schema(
     description: { type: String, trim: true, maxlength: 500, default: null },
     icon: { type: String, default: null },
 
+    // ── Branding (Slack-style per-channel customization) ────────
+    // All optional. Empty string clears, omitted leaves alone.
+    branding: {
+      // Hex color used as the channel header background in the FE.
+      // Validated by Joi (#RRGGBB) at write time so we trust it on read.
+      color: { type: String, default: null },
+      // Cloudinary URL — separate from `icon` because FE often shows
+      // a square avatar AND a wide cover image side by side.
+      coverImage: { type: String, default: null },
+      // Free-form one-liner shown under the channel name. Different
+      // from `description` which is the longer "about this channel" blob.
+      tagline: { type: String, trim: true, maxlength: 140, default: null },
+      // 1-line topic the room is currently focused on. Slack lets
+      // anyone with write access edit this.
+      topic: { type: String, trim: true, maxlength: 250, default: null },
+    },
+
     type: {
       type: String,
       enum: Object.values(chatRoomTypes),

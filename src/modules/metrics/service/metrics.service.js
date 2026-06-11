@@ -1,7 +1,6 @@
 import mongoose from "mongoose";
 import Sprint from "../../../DB/Model/sprint.model.js";
 import Task, { taskTypes } from "../../../DB/Model/task.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
@@ -10,15 +9,8 @@ import {
   detectBottlenecksAI,
   predictSprintCompletionAI,
 } from "../../../../ai-services/analytics.ai.service.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member)
-    throw new Error("Not a member of this organization", { cause: 403 });
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 function getDateRange(query = {}) {
   const { from, to, days = 30 } = query;
@@ -505,7 +497,7 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
   const { orgId, spaceId } = req.params;
   const { sprintId } = req.query;
 
-  if (!sprintId) return next(new Error("sprintId is required", { cause: 400 }));
+  if (!sprintId) return next(httpError(400, "sprintId is required"));
 
   await requireOrgMember(orgId, req.user._id);
 
@@ -520,7 +512,7 @@ export const predictSprintCompletion = asyncHandler(async (req, res, next) => {
     isDeleted: false,
   }).lean();
 
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   const tasks = await Task.find({
     organizationId: orgId,

@@ -1,10 +1,42 @@
 import { EventEmitter } from "node:events";
 import * as dbService from "../../DB/db.service.js";
 import notificationModel from "../../DB/Model/notification.model.js";
-import { getIo } from "../../modules/socket/socket.controller.js";
-import { getChatNamespace } from "../../modules/socket/socket.controller.js";
+import { childLogger } from "../logger/logger.js";
+import { sendPushToUsers } from "../push/push.service.js";
+import { shouldDeliver } from "../../modules/notification/service/preferences.service.js";
+import { sendNotificationEmail } from "../email/notification.email.js";
+
+const log = childLogger("notification-event");
 
 export const notificationEvent = new EventEmitter();
+
+// ─────────────────────────────────────────────────────────────
+// Transport registry
+// ─────────────────────────────────────────────────────────────
+/**
+ * Inverted dependency: the utility layer doesn't know about Socket.IO
+ * (or any other delivery channel). The socket module — at boot time —
+ * registers a transport function here. createNotification then calls
+ * the registered transport without ever importing modules/socket.
+ *
+ * If no transport is registered, notifications are still persisted to
+ * the DB; the realtime push just doesn't happen (graceful degradation).
+ *
+ * Signature: `transport(room, event, payload) => void`
+ */
+let _transport = null;
+
+export function setNotificationTransport(fn) {
+  if (typeof fn !== "function") {
+    throw new TypeError("notification transport must be a function");
+  }
+  _transport = fn;
+}
+
+/** For tests, or to disable realtime push at runtime. */
+export function clearNotificationTransport() {
+  _transport = null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Core: create ONE notification
@@ -47,22 +79,63 @@ const createNotification = async ({
       populate: [{ path: "triggeredBy", select: "username image" }],
     });
 
-    // Emit to the recipient's personal socket room if they are online
-    try {
-     const chatNs = getChatNamespace();
-     if (chatNs) {
-       chatNs.to(`user_${recipientId}`).emit("notification", {
-         notification: populated,
-       });
-     }
-    } catch (_) {
-      // Socket not initialised or user offline — silently skip
+    // Respect the recipient's notification preferences. inApp ALWAYS
+    // gets persisted (the row already saved above) so the bell badge
+    // works even when the user has disabled both push and realtime
+    // for this type — they'll see it on next page load.
+    const [wantInApp, wantPush, wantEmail] = await Promise.all([
+      shouldDeliver({ userId: recipientId, type, channel: "inApp" }),
+      shouldDeliver({ userId: recipientId, type, channel: "push" }),
+      shouldDeliver({ userId: recipientId, type, channel: "email" }),
+    ]);
+
+    // Realtime push to the socket transport (the in-app surface). Skip
+    // when the user has turned in-app off — they still get the DB row
+    // but no toast.
+    if (wantInApp && _transport) {
+      try {
+        _transport(`user_${recipientId}`, "notification", {
+          notification: populated,
+        });
+      } catch (err) {
+        // Transport failure must never break the notification flow
+        log.warn({ err, recipientId }, "notification transport push failed");
+      }
+    }
+
+    // Native push (FCM/web) fan-out. Stub-safe — if firebase creds are
+    // missing, sendPushToUsers just logs. We don't await aggressively
+    // because the user-visible record is already saved + socket-pushed.
+    if (wantPush) {
+      sendPushToUsers([recipientId], {
+        title,
+        body: body || "",
+        data: {
+          type,
+          entityType: entityType || "",
+          entityId: entityId ? String(entityId) : "",
+          notificationId: String(populated._id),
+        },
+      }).catch((err) =>
+        log.warn({ err, recipientId }, "push fan-out failed"),
+      );
+    }
+
+    // Email fan-out — rate-limited per recipient inside the helper.
+    // Same fire-and-forget pattern: failures don't roll back the rest.
+    if (wantEmail) {
+      sendNotificationEmail({
+        userId: recipientId,
+        title,
+        body,
+        entityType,
+        entityId,
+      }).catch((err) =>
+        log.warn({ err, recipientId }, "email fan-out failed"),
+      );
     }
   } catch (err) {
-    console.error(
-      `[notificationEvent] createNotification error (type: ${type}):`,
-      err.message,
-    );
+    log.error({ err, type, recipientId }, "createNotification failed");
   }
 };
 
@@ -85,6 +158,70 @@ const notifyMany = (recipientIds, payload) =>
  * Payload: { watcherIds, triggeredById, commenterName, taskTitle, taskId, commentContent }
  * Who gets it: all task watchers (assignee + anyone who commented before)
  */
+/**
+ * Emitted by: reminders.job → fireOne
+ * Who gets it: the creator of the reminder
+ */
+/**
+ * Meeting lifecycle notifications (Teams-style calendar pings).
+ */
+notificationEvent.on("meeting_invited", async (payload) => {
+  const { recipientId, triggeredById, meetingId, title, startTime } = payload;
+  await createNotification({
+    recipientId,
+    triggeredById,
+    type: "meeting_invited",
+    title: `📅 You're invited: ${title}`,
+    body: `Starts ${new Date(startTime).toLocaleString()}`,
+    entityType: "Meeting",
+    entityId: meetingId,
+  });
+});
+
+notificationEvent.on("meeting_starting_soon", async (payload) => {
+  const { recipientId, triggeredById, meetingId, title, startTime } = payload;
+  await createNotification({
+    recipientId,
+    triggeredById,
+    type: "meeting_starting_soon",
+    title: `⏰ Starting soon: ${title}`,
+    body: `${new Date(startTime).toLocaleTimeString()}`,
+    entityType: "Meeting",
+    entityId: meetingId,
+  });
+});
+
+notificationEvent.on("meeting_cancelled", async (payload) => {
+  const { recipientId, triggeredById, meetingId, title } = payload;
+  await createNotification({
+    recipientId,
+    triggeredById,
+    type: "meeting_cancelled",
+    title: `❌ Cancelled: ${title}`,
+    body: null,
+    entityType: "Meeting",
+    entityId: meetingId,
+  });
+});
+
+notificationEvent.on("reminder_due", async (payload) => {
+  const { recipientId, text, sourceRoomId, sourceMessageId, reminderId } =
+    payload;
+  await createNotification({
+    recipientId,
+    triggeredById: recipientId, // self
+    type: "reminder_due",
+    title: "⏰ Reminder",
+    body: text,
+    entityType: sourceMessageId
+      ? "Message"
+      : sourceRoomId
+        ? "ChatRoom"
+        : "Reminder",
+    entityId: sourceMessageId || sourceRoomId || reminderId,
+  });
+});
+
 notificationEvent.on("comment_added", async (payload) => {
   const {
     watcherIds,
@@ -147,6 +284,33 @@ notificationEvent.on("comment_mention", async (payload) => {
     body: commentContent.substring(0, 100),
     entityType: "Task",
     entityId: taskId,
+  });
+});
+
+/**
+ * Emitted by: shared.message.service → createMessage (when content has @mentions)
+ * Payload: { mentionedUserIds, triggeredById, roomId, messageId, contentPreview }
+ * Who gets it: each mentioned user in the chat room
+ */
+notificationEvent.on("message_mention", async (payload) => {
+  const {
+    mentionedUserIds,
+    triggeredById,
+    roomId,
+    messageId,
+    contentPreview,
+  } = payload;
+
+  await notifyMany(mentionedUserIds, {
+    triggeredById,
+    type: "message_mention",
+    title: "You were mentioned in a chat",
+    body: contentPreview,
+    entityType: "Message",
+    entityId: messageId,
+    // chatRoomId travels in `meta` only on the saved record (we don't
+    // have a Mixed `meta` field on Notification yet; if you add one,
+    // include roomId here so the FE can deep-link).
   });
 });
 

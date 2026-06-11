@@ -9,6 +9,8 @@ import userModel from "../../../DB/Model/user.model.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { compareHash } from "../../../utils/security/hash.security.js";
+import { syncOrgChatOnMemberChange } from "../../chatroom/service/chat.sync.service.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // ─────────────────────────────────────────────────────────────
 // joinOrganization — business logic
@@ -20,14 +22,11 @@ export const joinOrganization = async ({ email, password, joinCode }) => {
     filter: { email },
   });
   if (!user) {
-    throw new Error("Invalid email or password", { cause: 401 });
+    throw httpError(401, "Invalid email or password");
   }
 
   if (user.provider !== "System") {
-    throw new Error(
-      "This account uses social login. Please use your provider to sign in.",
-      { cause: 401 },
-    );
+    throw httpError(401, "This account uses social login. Please use your provider to sign in.");
   }
 
   const isPasswordValid = compareHash({
@@ -35,11 +34,11 @@ export const joinOrganization = async ({ email, password, joinCode }) => {
     hashValue: user.password,
   });
   if (!isPasswordValid) {
-    throw new Error("Invalid email or password", { cause: 401 });
+    throw httpError(401, "Invalid email or password");
   }
 
   if (!user.confirmEmail) {
-    throw new Error("Please verify your email first", { cause: 403 });
+    throw httpError(403, "Please verify your email first");
   }
 
   const organization = await dbService.findOne({
@@ -51,7 +50,7 @@ export const joinOrganization = async ({ email, password, joinCode }) => {
     },
   });
   if (!organization) {
-    throw new Error("Invalid organization code", { cause: 404 });
+    throw httpError(404, "Invalid organization code");
   }
 
   const existingMembership = await dbService.findOne({
@@ -64,9 +63,7 @@ export const joinOrganization = async ({ email, password, joinCode }) => {
 
   if (existingMembership) {
     if (existingMembership.isActive) {
-      throw new Error("You are already a member of this organization", {
-        cause: 409,
-      });
+      throw httpError(409, "You are already a member of this organization");
     }
 
     // reactivate deactivated membership
@@ -90,6 +87,9 @@ export const joinOrganization = async ({ email, password, joinCode }) => {
       isActive: true,
     },
   });
+
+  // Pull the new member into the org-wide chat if one exists.
+  syncOrgChatOnMemberChange(organization._id, { addUserId: user._id });
 
   return { organization, membership };
 };

@@ -1,0 +1,73 @@
+# docker-compose.yml — local end-to-end stack.
+#
+#   Bring everything up:    docker compose up -d
+#   View app logs:          docker compose logs -f app
+#   Tear down + reset data: docker compose down -v
+#
+# Notes:
+#   • Real secrets come from a local .env file at the repo root
+#     (never commit it). See .env.example for the keys.
+#   • MongoDB is single-node here — fine for dev. For prod you'd
+#     point DB_URI at a managed replica set.
+#   • Redis uses the same connection URL as the app's REDIS_URL.
+#   • The LiveKit credentials are passed through; the app degrades
+#     gracefully when they're missing.
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: rem-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rem-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rem-app
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Container-internal hostnames override the .env defaults so the
+      # app finds its dependencies inside the compose network.
+      DB_URI: mongodb://mongo:27017/REM
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+      MOOD: PROD
+      FRONTEND_URL: http://localhost:3000
+    # Everything else (secrets, LiveKit, Cloudinary, OpenAI…) is
+    # provided via a local .env file at the repo root.
+    env_file:
+      - .env
+
+volumes:
+  mongo-data:
+  redis-data:

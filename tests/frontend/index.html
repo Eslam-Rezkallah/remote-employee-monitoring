@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>REM — Test Harness</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+      .log-line { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+      video { background: #111; }
+    </style>
+  </head>
+  <body class="bg-slate-100 min-h-screen">
+    <div class="max-w-6xl mx-auto p-6 space-y-6">
+      <header class="flex items-center justify-between">
+        <div>
+          <h1 class="text-2xl font-bold text-slate-800">REM Backend — Test Harness</h1>
+          <p class="text-sm text-slate-500">Login → pick a chat room → start a call → join LiveKit room with real audio/video</p>
+        </div>
+        <div class="text-right text-sm">
+          <div>Server: <code id="serverUrlLabel" class="bg-white px-2 py-0.5 rounded border">—</code></div>
+          <div>User: <code id="userLabel" class="bg-white px-2 py-0.5 rounded border">—</code></div>
+        </div>
+      </header>
+
+      <!-- ────────── Step 1: Server + Login ────────── -->
+      <section class="bg-white rounded-lg shadow p-5 space-y-3">
+        <h2 class="text-lg font-semibold text-slate-700">1. Login</h2>
+        <div class="grid grid-cols-3 gap-3">
+          <input id="serverUrl" class="border rounded px-3 py-2" value="" placeholder="server (auto)" />
+          <input id="email" class="border rounded px-3 py-2" placeholder="email" />
+          <input id="password" type="password" class="border rounded px-3 py-2" placeholder="password" />
+        </div>
+        <div class="flex gap-2">
+          <button id="loginBtn" class="bg-slate-800 text-white px-4 py-2 rounded hover:bg-slate-900">Login</button>
+          <button id="logoutBtn" class="bg-slate-200 text-slate-700 px-4 py-2 rounded hover:bg-slate-300" disabled>Logout</button>
+        </div>
+      </section>
+
+      <!-- ────────── Step 2: Chat rooms ────────── -->
+      <section class="bg-white rounded-lg shadow p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-slate-700">2. Chat rooms</h2>
+          <button id="refreshRoomsBtn" class="text-sm text-slate-500 hover:text-slate-700">↻ refresh</button>
+        </div>
+        <div id="roomsList" class="space-y-2">
+          <p class="text-sm text-slate-400 italic">Login first.</p>
+        </div>
+      </section>
+
+      <!-- ────────── Step 3: Call ────────── -->
+      <section class="bg-white rounded-lg shadow p-5 space-y-3">
+        <h2 class="text-lg font-semibold text-slate-700">3. Call</h2>
+        <div id="callStatus" class="text-sm text-slate-500">Pick a chat room to enable call controls.</div>
+
+        <div class="flex flex-wrap gap-2">
+          <button id="initiateVoiceBtn" class="bg-emerald-600 text-white px-4 py-2 rounded disabled:opacity-40" disabled>📞 Voice call</button>
+          <button id="initiateVideoBtn" class="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-40" disabled>📹 Video call</button>
+          <button id="acceptCallBtn" class="bg-emerald-700 text-white px-4 py-2 rounded hidden">Accept</button>
+          <button id="rejectCallBtn" class="bg-rose-600 text-white px-4 py-2 rounded hidden">Reject</button>
+          <button id="hangupBtn" class="bg-rose-700 text-white px-4 py-2 rounded hidden">Hang up</button>
+          <button id="toggleMicBtn" class="bg-slate-200 px-4 py-2 rounded hidden">🎙 Mute</button>
+          <button id="toggleCamBtn" class="bg-slate-200 px-4 py-2 rounded hidden">📷 Camera off</button>
+          <button id="screenShareBtn" class="bg-slate-200 px-4 py-2 rounded hidden">🖥 Share screen</button>
+        </div>
+
+        <details class="bg-slate-50 rounded p-3">
+          <summary class="text-sm cursor-pointer text-slate-600">Already have a callId? (from seed script)</summary>
+          <div class="mt-2 flex gap-2">
+            <input id="manualCallId" class="border rounded px-3 py-2 flex-1" placeholder="callId" />
+            <button id="joinByCallIdBtn" class="bg-indigo-600 text-white px-4 py-2 rounded">Join LiveKit room</button>
+          </div>
+          <p class="text-xs text-slate-500 mt-1">Skips Socket.IO ringing — straight to LiveKit token + join.</p>
+        </details>
+
+        <!-- Video grid -->
+        <div id="videoGrid" class="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3"></div>
+      </section>
+
+      <!-- ────────── Logs ────────── -->
+      <section class="bg-slate-900 text-slate-100 rounded-lg p-4 max-h-72 overflow-y-auto">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-sm font-semibold">Activity log</h2>
+          <button id="clearLogBtn" class="text-xs text-slate-400 hover:text-white">clear</button>
+        </div>
+        <div id="log" class="space-y-1"></div>
+      </section>
+    </div>
+
+    <script>
+      // ════════════════════════════════════════════════════════
+      // STATE
+      // ════════════════════════════════════════════════════════
+      const state = {
+        baseUrl: location.origin, // when served from the backend, same-origin
+        accessToken: null,
+        user: null,
+        rooms: [],
+        selectedRoom: null,
+        socket: null,
+        activeCall: null,         // { callId, roomId, role: 'caller'|'callee' }
+        livekitRoom: null,
+        deviceId: localStorage.getItem('rem-device-id') || (() => {
+          const id = 'web-' + Math.random().toString(36).slice(2, 10);
+          localStorage.setItem('rem-device-id', id);
+          return id;
+        })(),
+      };
+
+      // ════════════════════════════════════════════════════════
+      // DOM helpers
+      // ════════════════════════════════════════════════════════
+      const $ = (id) => document.getElementById(id);
+
+      function log(msg, level = 'info') {
+        const colors = { info: 'text-slate-300', ok: 'text-emerald-400', warn: 'text-amber-300', err: 'text-rose-400', sock: 'text-sky-300', lk: 'text-fuchsia-300' };
+        const line = document.createElement('div');
+        line.className = `log-line ${colors[level] || ''}`;
+        const t = new Date().toLocaleTimeString();
+        line.textContent = `[${t}] ${msg}`;
+        $('log').prepend(line);
+      }
+      $('clearLogBtn').onclick = () => { $('log').innerHTML = ''; };
+
+      // ════════════════════════════════════════════════════════
+      // API wrapper
+      // ════════════════════════════════════════════════════════
+      async function api(path, { method = 'GET', body } = {}) {
+        const res = await fetch(state.baseUrl + path, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(state.accessToken && { Authorization: `Bearer ${state.accessToken}` }),
+          },
+          body: body ? JSON.stringify(body) : undefined,
+        });
+        const text = await res.text();
+        let json = {};
+        try { json = JSON.parse(text); } catch { /* */ }
+        if (!res.ok) throw new Error(json.message || `${res.status} ${res.statusText}`);
+        return json;
+      }
+
+      // ════════════════════════════════════════════════════════
+      // 1. LOGIN / LOGOUT
+      // ════════════════════════════════════════════════════════
+      $('serverUrl').value = state.baseUrl;
+      $('serverUrl').oninput = (e) => { state.baseUrl = e.target.value.replace(/\/$/, ''); };
+      $('serverUrlLabel').textContent = state.baseUrl;
+
+      $('loginBtn').onclick = async () => {
+        try {
+          const email = $('email').value.trim();
+          const password = $('password').value;
+          if (!email || !password) return log('email + password required', 'warn');
+          log(`POST /auth/login as ${email}`);
+          const { data } = await api('/auth/login', { method: 'POST', body: { email, password } });
+          if (data.requiresOTP) {
+            log('2FA enabled on this account — not supported in the test harness', 'warn');
+            return;
+          }
+          state.accessToken = data.accessToken;
+          state.user = data.user;
+          $('userLabel').textContent = `${data.user.username} (${data.user._id.slice(-6)})`;
+          $('serverUrlLabel').textContent = state.baseUrl;
+          $('loginBtn').disabled = true;
+          $('logoutBtn').disabled = false;
+          log('logged in', 'ok');
+          connectSocket();
+          await refreshRooms();
+        } catch (e) {
+          log('login failed: ' + e.message, 'err');
+        }
+      };
+
+      $('logoutBtn').onclick = () => {
+        try { state.socket?.disconnect(); } catch {}
+        try { state.livekitRoom?.disconnect(); } catch {}
+        Object.assign(state, { accessToken: null, user: null, rooms: [], selectedRoom: null, activeCall: null, livekitRoom: null, socket: null });
+        $('userLabel').textContent = '—';
+        $('loginBtn').disabled = false;
+        $('logoutBtn').disabled = true;
+        $('roomsList').innerHTML = '<p class="text-sm text-slate-400 italic">Login first.</p>';
+        $('videoGrid').innerHTML = '';
+        setCallButtons();
+        log('logged out', 'info');
+      };
+
+      // ════════════════════════════════════════════════════════
+      // 2. CHAT ROOMS
+      // ════════════════════════════════════════════════════════
+      $('refreshRoomsBtn').onclick = refreshRooms;
+
+      async function refreshRooms() {
+        if (!state.accessToken) return;
+        try {
+          const { data } = await api('/chat/rooms');
+          state.rooms = data.rooms || [];
+          renderRooms();
+          log(`fetched ${state.rooms.length} rooms`, 'ok');
+          if (state.rooms.length === 0) {
+            log('No rooms — join an org and create one (e.g. POST /chat/rooms/group)', 'warn');
+          }
+        } catch (e) {
+          log('list rooms failed: ' + e.message, 'err');
+        }
+      }
+
+      function renderRooms() {
+        const list = $('roomsList');
+        list.innerHTML = '';
+        if (state.rooms.length === 0) {
+          list.innerHTML = '<p class="text-sm text-slate-400 italic">No rooms yet.</p>';
+          return;
+        }
+        for (const room of state.rooms) {
+          const isSelected = state.selectedRoom?._id === room._id;
+          const el = document.createElement('div');
+          el.className = `border rounded p-3 flex items-center justify-between cursor-pointer hover:bg-slate-50 ${isSelected ? 'border-blue-500 bg-blue-50' : ''}`;
+          el.innerHTML = `
+            <div>
+              <div class="font-medium text-slate-800">${room.name || '(unnamed)'} <span class="text-xs text-slate-400">${room.type}</span></div>
+              <div class="text-xs text-slate-500">${(room.members || []).length} members · ${room.unreadCount || 0} unread</div>
+            </div>
+            <div class="text-xs text-slate-400">${room._id.slice(-8)}</div>
+          `;
+          el.onclick = () => selectRoom(room);
+          list.appendChild(el);
+        }
+      }
+
+      function selectRoom(room) {
+        state.selectedRoom = room;
+        renderRooms();
+        $('callStatus').textContent = `Selected: ${room.name || room._id} (${room.type})`;
+        setCallButtons();
+        log(`selected room ${room._id.slice(-8)}`);
+        checkActiveCall();
+      }
+
+      async function checkActiveCall() {
+        if (!state.selectedRoom) return;
+        try {
+          const { data } = await api(`/chat/rooms/${state.selectedRoom._id}/calls/active`);
+          if (data.call) {
+            log(`active call exists: ${data.call._id.slice(-8)} (${data.call.status})`, 'warn');
+            // Offer to rejoin if user is a participant
+            const isParticipant = data.call.participants.some(p =>
+              (p.userId?._id || p.userId)?.toString() === state.user._id
+            );
+            if (isParticipant) {
+              $('manualCallId').value = data.call._id;
+              log('You are a participant — paste-and-join is pre-filled', 'info');
+            }
+          }
+        } catch (e) {
+          log('active-call check failed: ' + e.message, 'warn');
+        }
+      }
+
+      // ════════════════════════════════════════════════════════
+      // 3. SOCKET.IO (call signaling)
+      // ════════════════════════════════════════════════════════
+      function connectSocket() {
+        const socket = io(state.baseUrl + '/call', {
+          auth: { authorization: `Bearer ${state.accessToken}` },
+          transports: ['websocket', 'polling'],
+        });
+
+        socket.on('connect', () => log('socket connected to /call', 'sock'));
+        socket.on('disconnect', (reason) => log(`socket disconnected: ${reason}`, 'sock'));
+        socket.on('connect_error', (err) => log('socket connect_error: ' + err.message, 'err'));
+        socket.on('call:error', (e) => log('call:error → ' + (e.message || JSON.stringify(e)), 'err'));
+
+        socket.on('call:initiated', ({ callId }) => {
+          state.activeCall = { callId, roomId: state.selectedRoom?._id, role: 'caller' };
+          log(`call:initiated  callId=${callId.slice(-8)}`, 'sock');
+          setCallButtons();
+          joinLivekit(state.selectedRoom._id, callId).catch(e => log('livekit join failed: ' + e.message, 'err'));
+        });
+
+        socket.on('call:incoming', ({ callId, roomId, type, caller }) => {
+          state.activeCall = { callId, roomId, role: 'callee', type };
+          log(`📞 INCOMING ${type} call from ${caller.username}  callId=${callId.slice(-8)}`, 'sock');
+          $('callStatus').textContent = `Incoming ${type} call from ${caller.username}`;
+          setCallButtons();
+        });
+
+        socket.on('call:accepted', ({ callId, roomId }) => {
+          log(`call:accepted callId=${callId.slice(-8)}`, 'sock');
+          if (state.activeCall?.role === 'callee') {
+            joinLivekit(roomId, callId).catch(e => log('livekit join failed: ' + e.message, 'err'));
+          }
+        });
+
+        socket.on('call:rejected', () => log('call:rejected', 'warn'));
+        socket.on('call:missed',   () => log('call:missed (no one answered)', 'warn'));
+        socket.on('call:busy',     () => log('call:busy', 'warn'));
+        socket.on('call:ended',    async () => {
+          log('call:ended', 'sock');
+          await leaveLivekit();
+          state.activeCall = null;
+          setCallButtons();
+        });
+
+        state.socket = socket;
+      }
+
+      // ════════════════════════════════════════════════════════
+      // CALL BUTTONS
+      // ════════════════════════════════════════════════════════
+      function setCallButtons() {
+        const hasRoom = !!state.selectedRoom;
+        const inCall  = !!state.livekitRoom;
+        const incomingCall = state.activeCall?.role === 'callee' && !inCall;
+
+        $('initiateVoiceBtn').disabled = !hasRoom || inCall || incomingCall;
+        $('initiateVideoBtn').disabled = !hasRoom || inCall || incomingCall;
+        $('acceptCallBtn').classList.toggle('hidden', !incomingCall);
+        $('rejectCallBtn').classList.toggle('hidden', !incomingCall);
+        $('hangupBtn').classList.toggle('hidden',     !inCall);
+        $('toggleMicBtn').classList.toggle('hidden',  !inCall);
+        $('toggleCamBtn').classList.toggle('hidden',  !inCall);
+        $('screenShareBtn').classList.toggle('hidden', !inCall);
+      }
+
+      $('initiateVoiceBtn').onclick = () => initiateCall('voice');
+      $('initiateVideoBtn').onclick = () => initiateCall('video');
+      $('acceptCallBtn').onclick = () => {
+        if (!state.activeCall) return;
+        state.socket.emit('call:accept', { callId: state.activeCall.callId });
+        log('emit call:accept', 'sock');
+      };
+      $('rejectCallBtn').onclick = () => {
+        if (!state.activeCall) return;
+        state.socket.emit('call:reject', { callId: state.activeCall.callId });
+        log('emit call:reject', 'sock');
+        state.activeCall = null;
+        setCallButtons();
+      };
+      $('hangupBtn').onclick = async () => {
+        if (state.activeCall) {
+          state.socket.emit('call:end', { callId: state.activeCall.callId });
+          log('emit call:end', 'sock');
+        }
+        await leaveLivekit();
+        state.activeCall = null;
+        setCallButtons();
+      };
+
+      function initiateCall(type) {
+        if (!state.selectedRoom) return log('pick a room first', 'warn');
+        if (!state.socket?.connected) return log('socket not connected', 'err');
+        log(`emit call:initiate type=${type} room=${state.selectedRoom._id.slice(-8)}`, 'sock');
+        state.socket.emit('call:initiate', { roomId: state.selectedRoom._id, type });
+      }
+
+      // Skip-the-socket: paste an existing callId (e.g. from seed-test-call.js)
+      $('joinByCallIdBtn').onclick = async () => {
+        const callId = $('manualCallId').value.trim();
+        if (!callId) return log('paste a callId first', 'warn');
+        if (!state.selectedRoom) return log('pick a room first', 'warn');
+        await joinLivekit(state.selectedRoom._id, callId).catch(e => log('join failed: ' + e.message, 'err'));
+      };
+
+      // ════════════════════════════════════════════════════════
+      // LIVEKIT JOIN / LEAVE
+      // ════════════════════════════════════════════════════════
+      async function joinLivekit(roomId, callId) {
+        if (state.livekitRoom) {
+          log('already in a LiveKit room — leaving first', 'warn');
+          await leaveLivekit();
+        }
+
+        log(`requesting LiveKit token for callId=${callId.slice(-8)}`);
+        const { data } = await api(
+          `/chat/rooms/${roomId}/calls/${callId}/livekit-token`,
+          { method: 'POST', body: { deviceId: state.deviceId } },
+        );
+
+        log(`got token (room=${data.room}, identity=${data.identity}) → connecting`, 'ok');
+
+        const room = new LivekitClient.Room({
+          adaptiveStream: true,
+          dynacast: true,
+        });
+
+        // Wire events BEFORE connect so we don't miss the first burst.
+        room
+          .on(LivekitClient.RoomEvent.ParticipantConnected, (p) => {
+            log(`participant joined: ${p.identity}`, 'lk');
+            renderParticipantSlot(p);
+          })
+          .on(LivekitClient.RoomEvent.ParticipantDisconnected, (p) => {
+            log(`participant left: ${p.identity}`, 'lk');
+            removeParticipantSlot(p.identity);
+          })
+          .on(LivekitClient.RoomEvent.TrackSubscribed, (track, _pub, p) => {
+            log(`track subscribed: ${p.identity} ${track.kind}`, 'lk');
+            attachTrack(track, p.identity);
+          })
+          .on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => track.detach())
+          .on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+            log('LiveKit disconnected: ' + reason, 'lk');
+          });
+
+        await room.connect(data.url, data.token);
+        log('LiveKit connected ✅', 'ok');
+
+        // Publish local mic + camera (camera only for video calls)
+        const isVideo = state.activeCall?.type === 'video' || !state.activeCall?.type;
+        await room.localParticipant.setMicrophoneEnabled(true);
+        if (isVideo) await room.localParticipant.setCameraEnabled(true);
+
+        renderParticipantSlot(room.localParticipant, true);
+        for (const pub of room.localParticipant.trackPublications.values()) {
+          if (pub.track) attachTrack(pub.track, room.localParticipant.identity, true);
+        }
+
+        state.livekitRoom = room;
+        if (!state.activeCall) {
+          state.activeCall = { callId, roomId, role: 'caller' };
+        }
+        setCallButtons();
+      }
+
+      async function leaveLivekit() {
+        if (!state.livekitRoom) return;
+        try { await state.livekitRoom.disconnect(); } catch {}
+        state.livekitRoom = null;
+        $('videoGrid').innerHTML = '';
+        setCallButtons();
+      }
+
+      // ════════════════════════════════════════════════════════
+      // VIDEO GRID
+      // ════════════════════════════════════════════════════════
+      function renderParticipantSlot(participant, isLocal = false) {
+        const id = participant.identity;
+        if ($('slot-' + cssId(id))) return;
+        const wrap = document.createElement('div');
+        wrap.id = 'slot-' + cssId(id);
+        wrap.className = 'relative bg-slate-900 rounded overflow-hidden aspect-video';
+        wrap.innerHTML = `
+          <div class="absolute top-1 left-1 z-10 text-xs bg-black/60 text-white px-2 py-0.5 rounded">
+            ${isLocal ? '🟢 You' : '👤'} ${id.split('__')[0].slice(-6)}
+          </div>
+          <div class="video-container w-full h-full flex items-center justify-center text-slate-500 text-xs">
+            ${isLocal ? 'awaiting your camera...' : 'connecting…'}
+          </div>
+        `;
+        $('videoGrid').appendChild(wrap);
+      }
+
+      function removeParticipantSlot(identity) {
+        const el = $('slot-' + cssId(identity));
+        if (el) el.remove();
+      }
+
+      function attachTrack(track, identity, isLocal = false) {
+        const slot = $('slot-' + cssId(identity));
+        if (!slot) renderParticipantSlot({ identity }, isLocal);
+        const container = $('slot-' + cssId(identity)).querySelector('.video-container');
+        const el = track.attach();
+        // Local video should be mirrored & muted (no echo)
+        if (track.kind === 'video') {
+          el.className = 'w-full h-full object-cover';
+          if (isLocal) el.style.transform = 'scaleX(-1)';
+          container.innerHTML = '';
+          container.appendChild(el);
+        } else if (track.kind === 'audio') {
+          if (isLocal) el.muted = true;
+          document.body.appendChild(el); // audio elements don't need to be visible
+        }
+      }
+
+      function cssId(s) { return s.replace(/[^a-z0-9_-]/gi, '_'); }
+
+      // ════════════════════════════════════════════════════════
+      // MIC / CAM / SCREEN toggles
+      // ════════════════════════════════════════════════════════
+      $('toggleMicBtn').onclick = async () => {
+        if (!state.livekitRoom) return;
+        const lp = state.livekitRoom.localParticipant;
+        const enabled = lp.isMicrophoneEnabled;
+        await lp.setMicrophoneEnabled(!enabled);
+        $('toggleMicBtn').textContent = enabled ? '🎙 Unmute' : '🎙 Mute';
+        log(`mic ${enabled ? 'muted' : 'unmuted'}`, 'lk');
+      };
+
+      $('toggleCamBtn').onclick = async () => {
+        if (!state.livekitRoom) return;
+        const lp = state.livekitRoom.localParticipant;
+        const enabled = lp.isCameraEnabled;
+        await lp.setCameraEnabled(!enabled);
+        $('toggleCamBtn').textContent = enabled ? '📷 Camera on' : '📷 Camera off';
+        log(`camera ${enabled ? 'off' : 'on'}`, 'lk');
+      };
+
+      $('screenShareBtn').onclick = async () => {
+        if (!state.livekitRoom) return;
+        const lp = state.livekitRoom.localParticipant;
+        const sharing = lp.isScreenShareEnabled;
+        try {
+          await lp.setScreenShareEnabled(!sharing);
+          $('screenShareBtn').textContent = sharing ? '🖥 Share screen' : '🖥 Stop sharing';
+          log(`screen share ${sharing ? 'stopped' : 'started'}`, 'lk');
+        } catch (e) {
+          log('screen share toggle failed: ' + e.message, 'err');
+        }
+      };
+
+      log(`harness loaded — deviceId=${state.deviceId}`);
+    </script>
+  </body>
+</html>

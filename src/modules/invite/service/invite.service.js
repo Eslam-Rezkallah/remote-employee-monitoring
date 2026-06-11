@@ -15,6 +15,8 @@ import invitationModel, {
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
+import { syncOrgChatOnMemberChange } from "../../chatroom/service/chat.sync.service.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 const hashToken = (token) =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -38,14 +40,14 @@ export const previewInvitation = asyncHandler(async (req, res, next) => {
 
   if (!invitation) {
     return next(
-      new Error("Invitation not found or already used", { cause: 404 }),
+      httpError(404, "Invitation not found or already used"),
     );
   }
 
   if (invitation.expiresAt < new Date()) {
     invitation.status = invitationStatus.Expired;
     await invitation.save();
-    return next(new Error("Invitation has expired", { cause: 410 }));
+    return next(httpError(410, "Invitation has expired"));
   }
 
   if (
@@ -54,7 +56,7 @@ export const previewInvitation = asyncHandler(async (req, res, next) => {
     !invitation.organizationId.isActive
   ) {
     return next(
-      new Error("Organization is no longer available", { cause: 404 }),
+      httpError(404, "Organization is no longer available"),
     );
   }
 
@@ -98,7 +100,7 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
 
   if (!invitation) {
     return next(
-      new Error("Invitation not found or already used", { cause: 404 }),
+      httpError(404, "Invitation not found or already used"),
     );
   }
 
@@ -106,16 +108,16 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
   if (invitation.expiresAt < new Date()) {
     invitation.status = invitationStatus.Expired;
     await invitation.save();
-    return next(new Error("Invitation has expired", { cause: 410 }));
+    return next(httpError(410, "Invitation has expired"));
   }
 
   // 3. Email must match the logged-in user
   if (req.user.email.toLowerCase() !== invitation.email) {
     return next(
-      new Error(
+      httpError(
+        403,
         "This invitation was sent to a different email address. " +
           `Please log in with ${invitation.email}`,
-        { cause: 403 },
       ),
     );
   }
@@ -131,7 +133,7 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
   });
   if (!org) {
     return next(
-      new Error("Organization is no longer available", { cause: 404 }),
+      httpError(404, "Organization is no longer available"),
     );
   }
 
@@ -184,6 +186,13 @@ export const acceptInvitation = asyncHandler(async (req, res, next) => {
   invitation.acceptedAt = new Date();
   invitation.acceptedBy = req.user._id;
   await invitation.save();
+
+  // Add the new member to the org-wide chat (and promote if they joined
+  // as owner/admin). Fire-and-forget — never blocks the response.
+  syncOrgChatOnMemberChange(org._id, { addUserId: req.user._id });
+  if (["owner", "admin"].includes(membership.role)) {
+    syncOrgChatOnMemberChange(org._id, { promoteUserId: req.user._id });
+  }
 
   return successResponse({
     res,

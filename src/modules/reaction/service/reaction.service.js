@@ -4,6 +4,7 @@ import chatRoomModel from "../../../DB/Model/chatroom.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 /* ============================================================
    Shared helper
@@ -14,9 +15,7 @@ async function requireRoomMember(roomId, userId) {
     filter: { _id: roomId, members: userId, isDeleted: false },
   });
   if (!room)
-    throw Object.assign(new Error("Room not found or access denied"), {
-      cause: 404,
-    });
+    throw httpError(404, "Room not found or access denied");
   return room;
 }
 
@@ -36,7 +35,7 @@ export const addReaction = asyncHandler(async (req, res, next) => {
     model: messageModel,
     filter: { _id: messageId, chatRoomId: roomId, deletedForEveryone: false },
   });
-  if (!message) return next(new Error("Message not found", { cause: 404 }));
+  if (!message) return next(httpError(404, "Message not found"));
 
   // Upsert: one reaction per user per message
   const existing = await dbService.findOne({
@@ -111,7 +110,7 @@ export const removeReaction = asyncHandler(async (req, res, next) => {
   });
 
   if (!reactionDoc) {
-    return next(new Error("Reaction not found", { cause: 404 }));
+    return next(httpError(404, "Reaction not found"));
   }
 
   await dbService.deleteOne({

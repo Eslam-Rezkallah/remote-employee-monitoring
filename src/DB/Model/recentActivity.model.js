@@ -9,9 +9,12 @@ export const activityActions = {
   Delete: "delete",
   StatusChange: "status_change",
   Assign: "assign",
+  Unassign: "unassign",
   Comment: "comment",
   Star: "star",
   Unstar: "unstar",
+  Pin: "pin",
+  Unpin: "unpin",
 };
 
 const recentActivitySchema = new Schema(

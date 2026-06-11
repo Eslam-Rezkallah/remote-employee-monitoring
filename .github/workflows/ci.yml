@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-progress runs on the same branch when a new push lands —
+# saves CI minutes on rapid pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  syntax:
+    name: Syntax + boot smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand(\"ping\").ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci --no-audit --no-fund
+
+      # Syntax-check every JS file in src/ — catches missing imports,
+      # broken syntax, and the kind of regression the httpError migration
+      # almost shipped silently.
+      - name: Syntax check
+        run: |
+          find src -name "*.js" -print0 \
+            | xargs -0 -n1 node --check
+          node --check index.js
+
+      # Boot the full app against the service containers, then exit.
+      # Surfaces any missing-import / circular-dep / mongoose-validation
+      # errors that --check can't see.
+      - name: Boot smoke test
+        env:
+          MOOD: DEV
+          APP_NAME: REM
+          PORT: "3000"
+          DB_URI: mongodb://localhost:27017/rem_ci
+          REDIS_URL: redis://localhost:6379
+          SALT: "10"
+          ACCESS_TOKEN_EXPIRATION: 15m
+          REFRESH_TOKEN_EXPIRATION: 7d
+          USER_ACCESS_TOKEN: ci-user-access-token-must-be-at-least-32-chars-long
+          USER_REFRESH_TOKEN: ci-user-refresh-token-must-be-at-least-32-chars-long
+          ADMIN_ACCESS_TOKEN: ci-admin-access-token-must-be-at-least-32-chars-long
+          ADMIN_REFRESH_TOKEN: ci-admin-refresh-token-must-be-at-least-32-chars-long
+          EMAIL: ci@example.com
+          EMAIL_PASSWORD: ci-placeholder
+          CLOUDINARY_CLOUD_NAME: ci
+          CLOUDINARY_API_KEY: ci
+          CLOUDINARY_API_SECRET: ci
+          GOOGLE_CLIENT_ID: ci.apps.googleusercontent.com
+          FRONTEND_URL: http://localhost:3000
+        run: |
+          node -e "
+          import('./src/App.controller.js').then(async ({ default: bootstrap }) => {
+            const express = (await import('express')).default;
+            const app = express();
+            await bootstrap(app, express);
+            console.log('BOOT OK');
+            process.exit(0);
+          }).catch(e => { console.error('BOOT FAIL', e); process.exit(1); });
+          "
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci --no-audit --no-fund
+
+      - run: npm test --if-present

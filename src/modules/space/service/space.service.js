@@ -1,20 +1,12 @@
 import Space from "../../../DB/Model/space.model.js";
 import SpaceView, { viewTypes } from "../../../DB/Model/spaceView.model.js";
 import Task, { taskPriority, taskStatus, taskTypes } from "../../../DB/Model/task.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import userModel from "../../../DB/Model/user.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 const DEFAULT_VIEWS = [
   { type: viewTypes.Summary, name: "Summary" },
@@ -84,6 +76,62 @@ export const listSpaces = asyncHandler(async (req, res, next) => {
   );
 });
 
+// GET /org/:orgId/spaces/:spaceId — single space detail
+export const getSpace = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId } = req.params;
+  await requireOrgMember(orgId, req.user._id);
+
+  const space = await dbService.findOne({
+    model: Space,
+    filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
+  });
+  if (!space) return next(httpError(404, "Space not found"));
+  return successResponse({ res, data: space });
+});
+
+// PATCH /org/:orgId/spaces/:spaceId — rename / change icon / change type
+//   The FE needs this for "edit space" UI. Without it the only way to
+//   rename was delete + recreate, which would orphan all the tasks.
+export const updateSpace = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId } = req.params;
+  const { name, icon, type } = req.body;
+
+  await requireOrgMember(orgId, req.user._id);
+
+  const space = await dbService.findOne({
+    model: Space,
+    filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
+  });
+  if (!space) return next(httpError(404, "Space not found"));
+
+  if (name !== undefined) space.name = name;
+  if (icon !== undefined) space.icon = icon;
+  // `type` is enum-validated by the schema — invalid values throw.
+  if (type !== undefined) space.type = type;
+  await space.save();
+
+  return successResponse({ res, message: "Space updated", data: space });
+});
+
+// DELETE /org/:orgId/spaces/:spaceId — soft delete
+//   Tasks/sprints under this space are NOT cascade-deleted (they keep
+//   isDeleted=false). Callers should run a cleanup job if they want
+//   them gone. This matches Jira: archiving a project keeps the issues.
+export const deleteSpace = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId } = req.params;
+  await requireOrgMember(orgId, req.user._id);
+
+  const space = await dbService.findOne({
+    model: Space,
+    filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
+  });
+  if (!space) return next(httpError(404, "Space not found"));
+
+  space.isDeleted = true;
+  await space.save();
+  return successResponse({ res, message: "Space deleted" });
+});
+
 export const searchSpaces = asyncHandler(async (req, res, next) => {
   const { orgId } = req.params;
   const { q, limit = 20 } = req.query;
@@ -110,7 +158,7 @@ export const getSpaceViews = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const items = await SpaceView.find({
     organizationId: orgId,
@@ -130,7 +178,7 @@ export const statusSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const rows = await Task.aggregate([
     {
@@ -204,7 +252,7 @@ export const prioritySummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const rows = await Task.aggregate([
     {
@@ -284,7 +332,7 @@ export const workloadSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const rows = await Task.aggregate([
     {
@@ -354,7 +402,7 @@ export const workTypeSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const rows = await Task.aggregate([
     {
@@ -430,7 +478,7 @@ export const epicProgressSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const epics = await Task.find({
     organizationId: space.organizationId,
@@ -542,7 +590,7 @@ export const timelineDataSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const filter = {
     organizationId: space.organizationId,
@@ -615,7 +663,7 @@ export const backlogSummary = asyncHandler(async (req, res, next) => {
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) return next(new Error("Space not found", { cause: 404 }));
+  if (!space) return next(httpError(404, "Space not found"));
 
   const filter = {
     organizationId: space.organizationId,

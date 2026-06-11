@@ -30,4 +30,33 @@ router.get(
   callService.getCall,
 );
 
+// POST /chat/rooms/:roomId/calls/:callId/livekit-token
+// Issues a short-lived JWT scoped to the call's LiveKit room.
+// One token per device — clients refresh on reconnect.
+router.post(
+  "/:callId/livekit-token",
+  validation(validators.issueLivekitToken),
+  callService.issueLivekitToken,
+);
+
+// ── Recording controls ─────────────────────────────────────
+// POST   /chat/rooms/:roomId/calls/:callId/recording          start
+// DELETE /chat/rooms/:roomId/calls/:callId/recording          stop
+// GET    /chat/rooms/:roomId/calls/:callId/recording/download signed URL
+router.post(
+  "/:callId/recording",
+  validation(validators.getCall),
+  callService.startCallRecording,
+);
+router.delete(
+  "/:callId/recording",
+  validation(validators.getCall),
+  callService.stopCallRecording,
+);
+router.get(
+  "/:callId/recording/download",
+  validation(validators.getCall),
+  callService.getRecordingDownload,
+);
+
 export default router;

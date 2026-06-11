@@ -95,6 +95,57 @@ const callSchema = new Schema(
       ],
       default: "normal",
     },
+
+    // ── Media provider ────────────────────────────────────────
+    // Tracks which signaling/media backend handled this call.
+    //   "mesh"    = legacy pure-WebRTC mesh (chat.socket.js relays SDP/ICE)
+    //   "livekit" = LiveKit SFU; media never traverses our server
+    // Defaults to "mesh" so existing rows stay valid and the
+    // legacy code path keeps working until cutover.
+    provider: {
+      type: String,
+      enum: ["mesh", "livekit"],
+      default: "mesh",
+      index: true,
+    },
+
+    // LiveKit room name (deterministic: `call_<callId>`).
+    // null for mesh calls.
+    livekitRoomName: {
+      type: String,
+      default: null,
+      index: true,
+      sparse: true,
+    },
+
+    // Recording metadata (LiveKit egress). Populated by the webhook
+    // receiver when egress events arrive. Schema kept loose now so
+    // we don't over-fit before we wire egress in Phase 4.
+    recording: {
+      enabled: { type: Boolean, default: false },
+      egressId: { type: String, default: null },
+      status: {
+        type: String,
+        enum: ["pending", "active", "ended", "failed"],
+        default: null,
+      },
+      fileUrl: { type: String, default: null },
+      startedAt: { type: Date, default: null },
+      endedAt: { type: Date, default: null },
+    },
+
+    // ── Teams-style "raise hand" queue ──────────────────────────
+    // Users in this array are signalling they want to speak. The
+    // socket layer pushes/pops entries; the FE shows the ordered
+    // list so the speaker can call on people one at a time.
+    // Stored on the Call doc so it survives reconnect — a user with
+    // their hand raised who briefly drops still appears raised.
+    raisedHands: [
+      {
+        userId: { type: Types.ObjectId, ref: "User", required: true },
+        raisedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true },
 );

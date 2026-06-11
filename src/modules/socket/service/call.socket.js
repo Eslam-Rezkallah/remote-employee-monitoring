@@ -3,6 +3,9 @@ import callModel, { callTypes, callStatus } from "../../../DB/Model/call.model.j
 import chatRoomModel from "../../../DB/Model/chatroom.model.js";
 import messageModel from "../../../DB/Model/message.model.js";
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
+import { childLogger } from "../../../utils/logger/logger.js";
+
+const log = childLogger("call-socket");
 
 /**
  * WebRTC Signaling Flow:
@@ -46,6 +49,20 @@ const EVENTS = {
   CALL_TOGGLE_AUDIO: "call:toggle-audio",
   CALL_TOGGLE_VIDEO: "call:toggle-video",
   CALL_MEDIA_STATE: "call:media-state",
+
+  // Teams-style raise hand
+  CALL_RAISE_HAND: "call:raise-hand",     // client → server
+  CALL_LOWER_HAND: "call:lower-hand",     // client → server
+  CALL_HAND_RAISED: "call:hand-raised",   // server → room
+  CALL_HAND_LOWERED: "call:hand-lowered", // server → room
+
+  // In-call mention (Teams "@person can you elaborate?")
+  CALL_MENTION: "call:mention",           // client → server
+  CALL_MENTIONED: "call:mentioned",       // server → mentioned user
+
+  // In-call chat (private to the meeting, separate from room chat)
+  CALL_CHAT_SEND: "call:chat:send",       // client → server
+  CALL_CHAT_MESSAGE: "call:chat:message", // server → room
 
   // incoming (client → server)
   CALL_INITIATE: "call:initiate",
@@ -96,7 +113,7 @@ async function insertCallSystemMessage(chatRoomId, senderId, content) {
     );
     return msg;
   } catch (err) {
-    console.error("[call] system message failed:", err.message);
+    log.error({ err, chatRoomId }, "system message insert failed");
   }
 }
 
@@ -475,6 +492,135 @@ export const registerCallSocket = (namespace) => {
       },
     );
 
+    // ── RAISE HAND ─────────────────────────────────────────
+    // Teams behaviour: hand stays raised until lowered explicitly OR
+    // the user is given the floor (the FE lowers it on speaker-change).
+    // We dedupe so a flaky tab can't enqueue twice.
+    socket.on(EVENTS.CALL_RAISE_HAND, async ({ callId }) => {
+      try {
+        if (!callId) return emitError(socket, "callId required");
+        const call = await callModel.findById(callId);
+        if (!call) return emitError(socket, "Call not found", 404);
+        const inCall = call.participants.some(
+          (p) =>
+            p.userId.toString() === userId && p.state === "in-call",
+        );
+        if (!inCall) return emitError(socket, "Not in call", 403);
+
+        // Atomic $addToSet won't help here because the embedded
+        // sub-doc has a timestamp — we want one row per user only.
+        const already = (call.raisedHands || []).some(
+          (h) => h.userId.toString() === userId,
+        );
+        if (already) return;
+
+        call.raisedHands.push({ userId, raisedAt: new Date() });
+        await call.save();
+
+        namespace.to(`call:${callId}`).emit(EVENTS.CALL_HAND_RAISED, {
+          callId,
+          userId,
+          username: user.username,
+          raisedAt: new Date(),
+          queueLength: call.raisedHands.length,
+        });
+      } catch (err) {
+        emitError(socket, err.message);
+      }
+    });
+
+    socket.on(EVENTS.CALL_LOWER_HAND, async ({ callId, targetUserId }) => {
+      try {
+        if (!callId) return emitError(socket, "callId required");
+        const call = await callModel.findById(callId);
+        if (!call) return emitError(socket, "Call not found", 404);
+
+        // Either lower YOUR own hand, or — if you're the caller —
+        // lower someone else's (the speaker "calling on" them).
+        const target = targetUserId || userId;
+        if (
+          target !== userId &&
+          call.callerId.toString() !== userId
+        ) {
+          return emitError(
+            socket,
+            "Only the caller can lower another participant's hand",
+            403,
+          );
+        }
+
+        const before = call.raisedHands.length;
+        call.raisedHands = call.raisedHands.filter(
+          (h) => h.userId.toString() !== target,
+        );
+        if (call.raisedHands.length === before) return; // nothing to do
+        await call.save();
+
+        namespace.to(`call:${callId}`).emit(EVENTS.CALL_HAND_LOWERED, {
+          callId,
+          userId: target,
+          loweredBy: userId,
+          queueLength: call.raisedHands.length,
+        });
+      } catch (err) {
+        emitError(socket, err.message);
+      }
+    });
+
+    // ── IN-CALL @MENTION ───────────────────────────────────
+    socket.on(EVENTS.CALL_MENTION, ({ callId, targetUserId, text }) => {
+      if (!callId || !targetUserId) return;
+      // The mention is broadcast to the meeting room so everyone
+      // sees "Maitha → @Bob" highlight, AND a direct push to the
+      // mentioned user so they get a sound/buzz even if minimized.
+      namespace.to(`call:${callId}`).emit(EVENTS.CALL_MENTIONED, {
+        callId,
+        fromUserId: userId,
+        fromUsername: user.username,
+        targetUserId,
+        text: (text || "").slice(0, 200),
+        at: new Date(),
+      });
+      namespace.to(`user_${targetUserId}`).emit(EVENTS.CALL_MENTIONED, {
+        callId,
+        fromUserId: userId,
+        fromUsername: user.username,
+        targetUserId,
+        text: (text || "").slice(0, 200),
+        at: new Date(),
+      });
+    });
+
+    // ── IN-CALL CHAT ───────────────────────────────────────
+    // Lightweight, ephemeral. NOT persisted — different from the
+    // chat-room message stream. Lives only for the call duration,
+    // matching Teams's meeting-chat-that-disappears behaviour.
+    socket.on(EVENTS.CALL_CHAT_SEND, async ({ callId, text }) => {
+      try {
+        if (!callId || !text?.trim()) return;
+        const call = await callModel
+          .findById(callId)
+          .select("participants status")
+          .lean();
+        if (!call) return emitError(socket, "Call not found", 404);
+        const inCall = call.participants.some(
+          (p) =>
+            p.userId.toString() === userId && p.state === "in-call",
+        );
+        if (!inCall) return emitError(socket, "Not in call", 403);
+
+        namespace.to(`call:${callId}`).emit(EVENTS.CALL_CHAT_MESSAGE, {
+          callId,
+          fromUserId: userId,
+          fromUsername: user.username,
+          text: text.slice(0, 1000),
+          at: new Date(),
+        });
+      } catch (err) {
+        emitError(socket, err.message);
+      }
+    });
+
     // ── END CALL ───────────────────────────────────────────
     socket.on(EVENTS.CALL_END, async ({ callId }) => {
       try {
@@ -637,7 +783,7 @@ export const registerCallSocket = (namespace) => {
           }
         }
       } catch (err) {
-        console.error("[call socket] disconnect cleanup error:", err.message);
+        log.error({ err, userId }, "disconnect cleanup failed");
       }
     });
   });

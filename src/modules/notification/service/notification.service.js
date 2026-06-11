@@ -2,6 +2,7 @@ import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import * as dbService from "../../../DB/db.service.js";
 import notificationModel from "../../../DB/Model/notification.model.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // ── Shared populate config ────────────────────────────────────
 const notificationPopulate = [
@@ -82,12 +83,12 @@ export const markAsRead = asyncHandler(async (req, res, next) => {
   });
 
   if (!notification) {
-    return next(new Error("Notification not found", { cause: 404 }));
+    return next(httpError(404, "Notification not found"));
   }
 
   if (notification.isRead) {
     return next(
-      new Error("Notification is already marked as read", { cause: 400 }),
+      httpError(400, "Notification is already marked as read"),
     );
   }
 
@@ -138,7 +139,7 @@ export const deleteNotification = asyncHandler(async (req, res, next) => {
   });
 
   if (!notification) {
-    return next(new Error("Notification not found", { cause: 404 }));
+    return next(httpError(404, "Notification not found"));
   }
 
   await dbService.findOneAndUpdate({

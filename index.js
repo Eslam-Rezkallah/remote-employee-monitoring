@@ -1,61 +1,41 @@
-// index.js
 import { config } from "./src/config/index.js";
-
 import express from "express";
 import bootstrap from "./src/App.controller.js";
-import { runIo } from "./src/modules/socket/socket.controller.js";
+import { runIo, getIo } from "./src/modules/socket/socket.controller.js";
 import startOTPCleanerJob from "./src/utils/jobs/otp.cleaner.job.js";
-import { stopIdleDetection } from "./src/utils/jobs/idle.detection.job.js";
-import mongoose from "mongoose";
+import { startScheduledMessagesJob } from "./src/utils/jobs/scheduled-messages.job.js";
+import { startRemindersJob } from "./src/utils/jobs/reminders.job.js";
+import { startMeetingRemindersJob } from "./src/utils/jobs/meeting-reminders.job.js";
+import { startWebhookDeliveryJob } from "./src/utils/jobs/webhook-delivery.job.js";
+import { attachGracefulShutdown } from "./src/utils/shutdown/graceful.js";
+import { logger } from "./src/utils/logger/logger.js";
+import { initSentry } from "./src/utils/observability/sentry.js";
+import { initSecrets } from "./src/utils/secrets/secrets.manager.js";
+
+// Bootstrap order: secrets first (so other inits can read them),
+// Sentry second (so it can capture errors thrown during bootstrap),
+// then everything else.
+await initSecrets();
+await initSentry();
 
 const app = express();
 
-console.log(`[${config.app.mood}] starting ${config.app.name}...`);
+logger.info(
+  { env: config.app.mood, name: config.app.name },
+  "starting service",
+);
 
 await bootstrap(app, express);
 
 const httpServer = app.listen(config.app.port, () => {
-  console.log(`app listening on port ${config.app.port}`);
+  logger.info({ port: config.app.port }, "http server listening");
 });
 
 runIo(httpServer);
 startOTPCleanerJob();
+startScheduledMessagesJob();
+startRemindersJob();
+startMeetingRemindersJob();
+startWebhookDeliveryJob();
 
-// ─── Graceful shutdown (Phase 2 will extend) ────────────────────
-const shutdown = async (signal) => {
-  console.log(`[shutdown] received ${signal}, closing gracefully...`);
-
-  // Stop accepting new HTTP connections
-  httpServer.close(() => console.log("[shutdown] http server closed"));
-
-  // Stop cron jobs
-  try {
-    stopIdleDetection();
-  } catch (e) {
-    console.error("[shutdown] stopIdleDetection error:", e.message);
-  }
-
-  // Close DB
-  try {
-    await mongoose.connection.close(false);
-    console.log("[shutdown] mongodb closed");
-  } catch (e) {
-    console.error("[shutdown] mongo close error:", e.message);
-  }
-
-  // Give in-flight requests up to 10s to finish
-  setTimeout(() => {
-    console.log("[shutdown] forcing exit");
-    process.exit(0);
-  }, 10_000).unref();
-};
-
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("unhandledRejection", (reason) => {
-  console.error("[unhandledRejection]", reason);
-});
-process.on("uncaughtException", (err) => {
-  console.error("[uncaughtException]", err);
-  shutdown("uncaughtException");
-});
+attachGracefulShutdown({ httpServer, io: getIo() });

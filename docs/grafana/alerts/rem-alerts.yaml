@@ -1,0 +1,94 @@
+# docs/grafana/alerts/rem-alerts.yaml
+#
+# Prometheus alerting rules. Import into your Alertmanager / Grafana
+# Cloud alerting setup. Conservative thresholds — tune per traffic.
+#
+# Recommended routes:
+#   • severity=critical → PagerDuty / on-call
+#   • severity=warning  → Slack channel #rem-alerts
+#   • severity=info     → email digest, no paging
+
+groups:
+  - name: rem-backend-availability
+    interval: 1m
+    rules:
+      - alert: HighErrorRate
+        # 5xx rate above 5% for 5 minutes
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: ">5% 5xx error rate on REM backend"
+          description: |
+            5xx rate over the last 5m: {{ printf "%.1f%%" (mulf $value 100) }}.
+            Check Sentry for the top exceptions.
+
+      - alert: SlowP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(http_request_duration_seconds_bucket[5m]))
+          ) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency over 1s for 10m"
+          description: "Investigate top slow routes; check DB + Redis load."
+
+      - alert: EventLoopLagSpike
+        # Node event-loop lag (P99) over 200ms means we're CPU-starved
+        # or doing sync work on the main thread.
+        expr: nodejs_eventloop_lag_p99_seconds > 0.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Event loop lag P99 >200ms"
+          description: |
+            Long-running synchronous work is blocking Node. Profile
+            the process and move heavy work to a worker thread or job.
+
+      - alert: ProcessRestartedRecently
+        expr: time() - process_start_time_seconds < 300
+        for: 0m
+        labels:
+          severity: info
+        annotations:
+          summary: "REM backend restarted in the last 5 minutes"
+          description: "Could be a deploy — confirm with the release log."
+
+  - name: rem-backend-business
+    interval: 1m
+    rules:
+      - alert: BruteForceSpike
+        # Sudden burst of failed logins suggests an attack.
+        # Wire this to a Sentry capture-event or to our audit log
+        # via a recording rule if Mongo isn't directly exposed to
+        # Prometheus.
+        expr: |
+          sum(rate(http_requests_total{route="/auth/login", status="401"}[5m])) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Login failure burst on /auth/login"
+          description: "Possible brute-force attempt; check audit log for IPs."
+
+      - alert: WebhookDeliveryStuck
+        # Pending webhook deliveries piling up means the worker is
+        # behind. Requires exposing `webhook_pending_total` from the
+        # worker as a custom metric (add later).
+        expr: webhook_pending_total > 500
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhook delivery queue backing up"
+          description: "Worker isn't keeping up. Check WEBHOOK_BATCH and target endpoints."

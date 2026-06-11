@@ -26,3 +26,15 @@ export const getCall = joi
     callId: id.label("callId"),
   })
   .required();
+
+// POST /chat/rooms/:roomId/calls/:callId/livekit-token
+// deviceId is opaque to the server — used only to disambiguate
+// multiple simultaneous sessions for the same user (LiveKit
+// rejects duplicate identities).
+export const issueLivekitToken = joi
+  .object({
+    roomId: id.label("roomId"),
+    callId: id.label("callId"),
+    deviceId: joi.string().min(1).max(64).optional(),
+  })
+  .required();

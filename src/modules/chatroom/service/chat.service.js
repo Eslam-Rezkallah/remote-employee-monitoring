@@ -16,25 +16,14 @@ import {
   forceUserLeaveRoom,
   forceAllMembersLeaveRoom,
 } from "../../socket/util/socket-room.util.js";
+import { childLogger } from "../../../utils/logger/logger.js";
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
+
+const chatLog = childLogger("chat-service");
 // ─────────────────────────────────────────────────────────────
 // SHARED HELPERS
 // ─────────────────────────────────────────────────────────────
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: {
-      organizationId: orgId,
-      userId,
-      isActive: true,
-    },
-  });
-  if (!member)
-    throw Object.assign(new Error("Not a member of this organization"), {
-      cause: 403,
-    });
-  return member;
-}
 
 async function requireRoomMember(roomId, userId) {
   const room = await dbService.findOne({
@@ -46,9 +35,7 @@ async function requireRoomMember(roomId, userId) {
     },
   });
   if (!room)
-    throw Object.assign(new Error("Room not found or access denied"), {
-      cause: 404,
-    });
+    throw httpError(404, "Room not found or access denied");
   return room;
 }
 
@@ -57,10 +44,13 @@ async function requireRoomAdmin(room, userId) {
   const isAdmin = room.admins.some((a) => a.toString() === uid);
   const isCreator = room.createdBy.toString() === uid;
   if (!isAdmin && !isCreator)
-    throw Object.assign(new Error("Not authorized to manage this room"), {
-      cause: 403,
-    });
+    throw httpError(403, "Not authorized to manage this room");
 }
+
+// Note: chat-membership sync helpers live in `chat.sync.service.js`
+// with proper diffing + socket eviction. Callers import them directly
+// from that module — do NOT re-export here to avoid two divergent
+// implementations of the same logic.
 
 // FIX: helper to find a shared org between two users
 async function findSharedOrg(userIdA, userIdB) {
@@ -98,7 +88,7 @@ function broadcastRoomCreated(room) {
       chatNs.broadcastRoomCreated(room);
     }
   } catch (err) {
-    console.error("[broadcastRoomCreated] Error:", err.message);
+    chatLog.error({ err, roomId: room?._id }, "broadcastRoomCreated failed");
   }
 }
 
@@ -112,7 +102,7 @@ export const createDirect = asyncHandler(async (req, res, next) => {
   const { targetUserId } = req.body;
 
   if (senderId.toString() === targetUserId) {
-    return next(new Error("Cannot create a DM with yourself", { cause: 400 }));
+    return next(httpError(400, "Cannot create a DM with yourself"));
   }
 
   const target = await dbService.findOne({
@@ -123,16 +113,13 @@ export const createDirect = asyncHandler(async (req, res, next) => {
     },
     select: "_id username",
   });
-  if (!target) return next(new Error("Target user not found", { cause: 404 }));
+  if (!target) return next(httpError(404, "Target user not found"));
 
   // FIX: verify both users share at least one organization
   const sharedOrgId = await findSharedOrg(senderId, targetUserId);
   if (!sharedOrgId) {
     return next(
-      new Error(
-        "Cannot create a DM — you don't share an organization with this user",
-        { cause: 403 },
-      ),
+      httpError(403, "Cannot create a DM — you don't share an organization with this user"),
     );
   }
 
@@ -200,13 +187,19 @@ export const createChannel = asyncHandler(async (req, res, next) => {
   } = req.body;
   const userId = req.user._id;
 
+  // FIX: channel MUST be scoped to org/team/project — otherwise it has no
+  // access boundary and ends up orphaned (no one can list it).
+  if (!organizationId && !teamId && !projectId) {
+    return next(
+      httpError(400, "Channel must be scoped to an organization, team, or project"),
+    );
+  }
+
   if (organizationId) {
     const member = await requireOrgMember(organizationId, userId);
     if (!["owner", "admin"].includes(member.role)) {
       return next(
-        new Error("Only organization owner or admin can create channels", {
-          cause: 403,
-        }),
+        httpError(403, "Only organization owner or admin can create channels"),
       );
     }
   }
@@ -215,6 +208,9 @@ export const createChannel = asyncHandler(async (req, res, next) => {
   let resolvedOrgId = organizationId || null;
 
   if (teamId) {
+    // FIX: team-scoped channel creation requires team-manager OR
+    // org-admin/owner authority. Plain team members can join existing
+    // channels but not create new ones — matches Slack/Teams convention.
     const team = await dbService.findOne({
       model: teamModel,
       filter: {
@@ -225,8 +221,31 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     });
     if (!team)
       return next(
-        new Error("Team not found or you are not a member", { cause: 404 }),
+        httpError(404, "Team not found or you are not a member"),
       );
+
+    const isTeamManager = team.managers
+      .map((m) => m.toString())
+      .includes(userId.toString());
+
+    let isOrgAdmin = false;
+    if (team.organizationId) {
+      const mem = await dbService.findOne({
+        model: memberModel,
+        filter: {
+          organizationId: team.organizationId,
+          userId,
+          isActive: true,
+        },
+      });
+      isOrgAdmin = mem && ["owner", "admin"].includes(mem.role);
+    }
+
+    if (!isTeamManager && !isOrgAdmin) {
+      return next(
+        httpError(403, "Only a team manager or organization admin/owner can create team channels"),
+      );
+    }
 
     // FIX: use the team's organizationId
     if (!resolvedOrgId) resolvedOrgId = team.organizationId;
@@ -241,7 +260,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
       },
       select: "manager organizationId",
     });
-    if (!project) return next(new Error("Project not found", { cause: 404 }));
+    if (!project) return next(httpError(404, "Project not found"));
 
     const isProjectManager = project.manager.toString() === userId.toString();
     let isOrgAdmin = false;
@@ -258,10 +277,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
     }
     if (!isProjectManager && !isOrgAdmin)
       return next(
-        new Error(
-          "Only project manager or organization owner/admin can create project channels",
-          { cause: 403 },
-        ),
+        httpError(403, "Only project manager or organization owner/admin can create project channels"),
       );
 
     if (!resolvedOrgId) resolvedOrgId = project.organizationId;
@@ -281,9 +297,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
   });
   if (existingChannel) {
     return next(
-      new Error("A channel with the same name already exists in this scope", {
-        cause: 409,
-      }),
+      httpError(409, "A channel with the same name already exists in this scope"),
     );
   }
 
@@ -309,10 +323,7 @@ export const createChannel = asyncHandler(async (req, res, next) => {
 
     if (validMembers.length !== memberIds.length) {
       return next(
-        new Error(
-          "One or more selected members are not active members of this organization",
-          { cause: 400 },
-        ),
+        httpError(400, "One or more selected members are not active members of this organization"),
       );
     }
   }
@@ -370,7 +381,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
   });
   if (!team)
     return next(
-      new Error("Team not found or you are not a member", { cause: 404 }),
+      httpError(404, "Team not found or you are not a member"),
     );
 
   let room = await dbService.findOne({
@@ -390,6 +401,16 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
     });
   }
 
+  // FIX: admins must be team managers + team creator, NOT every member.
+  // The previous `admins: team.members` made every team member able to
+  // delete/update the team chat, which is a clear access-control bug.
+  const adminIds = [
+    ...new Set([
+      team.createdBy?.toString(),
+      ...team.managers.map((m) => m.toString()),
+    ].filter(Boolean)),
+  ];
+
   room = await dbService.create({
     model: chatRoomModel,
     data: {
@@ -398,7 +419,7 @@ export const createTeamChat = asyncHandler(async (req, res, next) => {
       organizationId: team.organizationId, // FIX: use team's org
       teamId,
       members: team.members,
-      admins: team.members,
+      admins: adminIds,
       createdBy: userId,
       isPrivate: false,
     },
@@ -433,10 +454,7 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
   const member = await requireOrgMember(organizationId, userId);
   if (!["owner", "admin"].includes(member.role)) {
     return next(
-      new Error(
-        "Only organization owner or admin can create organization chat",
-        { cause: 403 },
-      ),
+      httpError(403, "Only organization owner or admin can create organization chat"),
     );
   }
 
@@ -460,9 +478,15 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
   const orgMembers = await dbService.find({
     model: memberModel,
     filter: { organizationId, isActive: true },
-    select: "userId",
+    select: "userId role",
   });
   const memberIds = orgMembers.map((m) => m.userId);
+  // FIX: org-wide chat admins must be ONLY org owners/admins, not every
+  // member. The previous code gave every org member admin rights to the
+  // organization-wide chat (so anyone could delete it).
+  const adminIds = orgMembers
+    .filter((m) => ["owner", "admin"].includes(m.role))
+    .map((m) => m.userId);
 
   room = await dbService.create({
     model: chatRoomModel,
@@ -471,7 +495,7 @@ export const createOrganizationChat = asyncHandler(async (req, res, next) => {
       type: chatRoomTypes.organization,
       organizationId,
       members: memberIds,
-      admins: memberIds,
+      admins: adminIds,
       createdBy: userId,
       isPrivate: false,
     },
@@ -521,9 +545,7 @@ export const createGroup = asyncHandler(async (req, res, next) => {
 
   if (validMembers.length !== allMemberIds.length) {
     return next(
-      new Error("One or more members are not part of the organization", {
-        cause: 400,
-      }),
+      httpError(400, "One or more members are not part of the organization"),
     );
   }
 
@@ -648,7 +670,7 @@ export const getChatRoom = asyncHandler(async (req, res, next) => {
     });
 
   if (!room)
-    return next(new Error("Room not found or access denied", { cause: 404 }));
+    return next(httpError(404, "Room not found or access denied"));
 
   return successResponse({ res, data: { room } });
 });
@@ -659,14 +681,14 @@ export const getChatRoom = asyncHandler(async (req, res, next) => {
 export const updateRoom = asyncHandler(async (req, res, next) => {
   const { roomId } = req.params;
   const userId = req.user._id;
-  const { name, description, isPrivate } = req.body;
+  const { name, description, isPrivate, icon, branding } = req.body;
 
   const room = await requireRoomMember(roomId, userId);
   await requireRoomAdmin(room, userId);
 
   if (room.type === chatRoomTypes.direct) {
     return next(
-      new Error("Cannot update a direct message room", { cause: 400 }),
+      httpError(400, "Cannot update a direct message room"),
     );
   }
 
@@ -674,6 +696,17 @@ export const updateRoom = asyncHandler(async (req, res, next) => {
   if (name !== undefined) update.name = name;
   if (description !== undefined) update.description = description;
   if (isPrivate !== undefined) update.isPrivate = isPrivate;
+  if (icon !== undefined) update.icon = icon;
+  // Partial branding merge — caller can update one field without
+  // having to send the others. Empty string clears a value.
+  if (branding && typeof branding === "object") {
+    if (branding.color !== undefined) update["branding.color"] = branding.color;
+    if (branding.coverImage !== undefined)
+      update["branding.coverImage"] = branding.coverImage;
+    if (branding.tagline !== undefined)
+      update["branding.tagline"] = branding.tagline;
+    if (branding.topic !== undefined) update["branding.topic"] = branding.topic;
+  }
 
   const updated = await dbService.findOneAndUpdate({
     model: chatRoomModel,
@@ -701,18 +734,16 @@ export const joinChannel = asyncHandler(async (req, res, next) => {
     model: chatRoomModel,
     filter: { _id: roomId, isDeleted: false },
   });
-  if (!room) return next(new Error("Room not found", { cause: 404 }));
+  if (!room) return next(httpError(404, "Room not found"));
 
   if (room.type !== chatRoomTypes.channel) {
     return next(
-      new Error("Can only join channels. Use invite for groups.", {
-        cause: 400,
-      }),
+      httpError(400, "Can only join channels. Use invite for groups."),
     );
   }
   if (room.isPrivate) {
     return next(
-      new Error("This channel is private. Request an invite.", { cause: 403 }),
+      httpError(403, "This channel is private. Request an invite."),
     );
   }
 
@@ -756,7 +787,7 @@ export const leaveRoom = asyncHandler(async (req, res, next) => {
   const room = await requireRoomMember(roomId, userId);
 
   if (room.type === chatRoomTypes.direct) {
-    return next(new Error("Cannot leave a direct message", { cause: 400 }));
+    return next(httpError(400, "Cannot leave a direct message"));
   }
   const isAdmin = room.admins.some((a) => a.toString() === userId.toString());
 
@@ -798,7 +829,20 @@ export const addMember = asyncHandler(async (req, res, next) => {
 
   if (room.type === chatRoomTypes.direct) {
     return next(
-      new Error("Cannot add members to a direct message", { cause: 400 }),
+      httpError(400, "Cannot add members to a direct message"),
+    );
+  }
+
+  // FIX: organization-wide chat membership is managed by the org module
+  // (members join automatically when accepted into the org). Manually
+  // adding people here desyncs the room from its source of truth.
+  if (room.type === chatRoomTypes.organization) {
+    return next(
+      httpError(
+        400,
+        "Organization chat membership is managed automatically. " +
+          "Invite the user to the organization instead.",
+      ),
     );
   }
 
@@ -806,14 +850,48 @@ export const addMember = asyncHandler(async (req, res, next) => {
     model: userModel,
     filter: { _id: memberId, isDeleted: false },
   });
-  if (!newMember) return next(new Error("User not found", { cause: 404 }));
+  if (!newMember) return next(httpError(404, "User not found"));
 
   if (room.organizationId) {
     await requireOrgMember(room.organizationId, memberId);
   }
 
-  // ✅ FIX: use dbService.findOneAndUpdate with populate param
-  //    instead of chaining .populate() on the result
+  // FIX: cross-scope leak — a team chat must only contain team members,
+  // a project channel must only contain project members. Without this
+  // check an admin could parachute someone from outside the team/project
+  // into the chat (visible to all current members + can read history).
+  if (room.type === chatRoomTypes.team && room.teamId) {
+    const inTeam = await dbService.findOne({
+      model: teamModel,
+      filter: {
+        _id: room.teamId,
+        members: memberId,
+        isDeleted: false,
+      },
+    });
+    if (!inTeam) {
+      return next(
+        httpError(400, "User must be a member of the team before being added to the team chat"),
+      );
+    }
+  }
+
+  if (room.type === chatRoomTypes.channel && room.projectId) {
+    const inProject = await dbService.findOne({
+      model: projectModel,
+      filter: {
+        _id: room.projectId,
+        members: memberId,
+        isDeleted: false,
+      },
+    });
+    if (!inProject) {
+      return next(
+        httpError(400, "User must be a member of the project before being added to its channel"),
+      );
+    }
+  }
+
   const updated = await dbService.findOneAndUpdate({
     model: chatRoomModel,
     filter: { _id: roomId },
@@ -840,17 +918,13 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
   if (room.type === chatRoomTypes.direct) {
     return next(
-      Object.assign(new Error("Cannot remove members from a direct message"), {
-        cause: 400,
-      }),
+      httpError(400, "Cannot remove members from a direct message"),
     );
   }
 
   if (memberId === userId.toString()) {
     return next(
-      Object.assign(new Error("Use the leave endpoint to remove yourself"), {
-        cause: 400,
-      }),
+      httpError(400, "Use the leave endpoint to remove yourself"),
     );
   }
 
@@ -878,11 +952,11 @@ export const deleteRoom = asyncHandler(async (req, res, next) => {
     model: chatRoomModel,
     filter: { _id: roomId, isDeleted: false },
   });
-  if (!room) return next(new Error("Room not found", { cause: 404 }));
+  if (!room) return next(httpError(404, "Room not found"));
 
   if (room.createdBy.toString() !== userId.toString()) {
     return next(
-      new Error("Only the room creator can delete this room", { cause: 403 }),
+      httpError(403, "Only the room creator can delete this room"),
     );
   }
 

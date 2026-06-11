@@ -1,30 +1,153 @@
 import Sprint, { sprintStatus } from "../../../DB/Model/sprint.model.js";
 import Space from "../../../DB/Model/space.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 
 // ✅ ADD THIS IMPORT
 import { logActivity } from "../../../utils/activity/activity.logger.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 async function requireSpace(spaceId, orgId) {
   const space = await dbService.findOne({
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) throw new Error("Space not found", { cause: 404 });
+  if (!space) throw httpError(404, "Space not found");
   return space;
 }
+
+// GET /org/:orgId/spaces/:spaceId/sprints?status=&page=&limit=
+// Lists sprints in a space, newest first. The FE uses this to render
+// the sprint backlog + sprint planning board.
+export const listSprints = asyncHandler(async (req, res) => {
+  const { orgId, spaceId } = req.params;
+  await requireOrgMember(orgId, req.user._id);
+  await requireSpace(spaceId, orgId);
+
+  const filter = {
+    organizationId: orgId,
+    spaceId,
+    isDeleted: false,
+  };
+  if (req.query.status) filter.status = req.query.status;
+
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+  const skip = (page - 1) * limit;
+
+  const [items, total] = await Promise.all([
+    Sprint.find(filter)
+      .sort({ startDate: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("createdBy", "username email image")
+      .lean(),
+    Sprint.countDocuments(filter),
+  ]);
+
+  return successResponse({
+    res,
+    data: { items, total, page, limit, pages: Math.ceil(total / limit) },
+  });
+});
+
+// GET /org/:orgId/spaces/:spaceId/sprints/:sprintId
+export const getSprint = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId, sprintId } = req.params;
+  await requireOrgMember(orgId, req.user._id);
+  await requireSpace(spaceId, orgId);
+
+  const sprint = await Sprint.findOne({
+    _id: sprintId,
+    organizationId: orgId,
+    spaceId,
+    isDeleted: false,
+  })
+    .populate("createdBy", "username email image")
+    .lean();
+  if (!sprint) return next(httpError(404, "Sprint not found"));
+
+  return successResponse({ res, data: sprint });
+});
+
+// PATCH /org/:orgId/spaces/:spaceId/sprints/:sprintId
+// Edit name/goal/dates. Status changes go through the dedicated
+// /sprints/:id/status endpoint so notification fan-out runs.
+export const updateSprint = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId, sprintId } = req.params;
+  const { name, goal, startDate, endDate } = req.body;
+
+  await requireOrgMember(orgId, req.user._id);
+  await requireSpace(spaceId, orgId);
+
+  const sprint = await Sprint.findOne({
+    _id: sprintId,
+    organizationId: orgId,
+    spaceId,
+    isDeleted: false,
+  });
+  if (!sprint) return next(httpError(404, "Sprint not found"));
+
+  // Resolve effective dates so we validate the FINAL state, not just
+  // whichever the caller sent today.
+  const effStart = startDate ? new Date(startDate) : sprint.startDate;
+  const effEnd = endDate ? new Date(endDate) : sprint.endDate;
+  if (effStart && effEnd && effEnd < effStart) {
+    return next(httpError(400, "endDate must be after startDate"));
+  }
+
+  if (name !== undefined) sprint.name = name;
+  if (goal !== undefined) sprint.goal = goal;
+  if (startDate !== undefined) sprint.startDate = effStart;
+  if (endDate !== undefined) sprint.endDate = effEnd;
+  await sprint.save();
+
+  const track = req.logActivity || logActivity;
+  await track({
+    actorId: req.user._id,
+    orgId,
+    spaceId,
+    entityType: "Sprint",
+    entityId: sprint._id,
+    action: "update",
+    meta: { fields: Object.keys(req.body || {}) },
+  });
+
+  return successResponse({ res, message: "Sprint updated", data: sprint });
+});
+
+// DELETE /org/:orgId/spaces/:spaceId/sprints/:sprintId  (soft)
+export const deleteSprint = asyncHandler(async (req, res, next) => {
+  const { orgId, spaceId, sprintId } = req.params;
+  await requireOrgMember(orgId, req.user._id);
+  await requireSpace(spaceId, orgId);
+
+  const sprint = await Sprint.findOne({
+    _id: sprintId,
+    organizationId: orgId,
+    spaceId,
+    isDeleted: false,
+  });
+  if (!sprint) return next(httpError(404, "Sprint not found"));
+
+  sprint.isDeleted = true;
+  await sprint.save();
+
+  const track = req.logActivity || logActivity;
+  await track({
+    actorId: req.user._id,
+    orgId,
+    spaceId,
+    entityType: "Sprint",
+    entityId: sprint._id,
+    action: "delete",
+    meta: { name: sprint.name },
+  });
+
+  return successResponse({ res, message: "Sprint deleted" });
+});
 
 // POST /org/:orgId/spaces/:spaceId/sprints
 export const createSprint = asyncHandler(async (req, res, next) => {
@@ -35,7 +158,7 @@ export const createSprint = asyncHandler(async (req, res, next) => {
   await requireSpace(spaceId, orgId);
 
   if (new Date(endDate) < new Date(startDate)) {
-    return next(new Error("endDate must be after startDate", { cause: 400 }));
+    return next(httpError(400, "endDate must be after startDate"));
   }
 
   const sprint = await dbService.create({
@@ -82,7 +205,7 @@ export const updateSprintStatus = asyncHandler(async (req, res, next) => {
     model: Sprint,
     filter: { _id: sprintId, isDeleted: false },
   });
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   await requireOrgMember(sprint.organizationId, req.user._id);
 
@@ -119,6 +242,50 @@ export const updateSprintStatus = asyncHandler(async (req, res, next) => {
     action: "status_change",
     meta: { from: oldStatus, to: status },
   });
+
+  // Notify everyone whose tasks live in this sprint when it starts
+  // or closes. The notification.event listeners (sprint_started,
+  // sprint_closed) were already wired but had no producer until now.
+  if (
+    (status === sprintStatus.Active && oldStatus !== sprintStatus.Active) ||
+    (status === sprintStatus.Closed && oldStatus !== sprintStatus.Closed)
+  ) {
+    try {
+      const Task = (await import("../../../DB/Model/task.model.js")).default;
+      const { notificationEvent } = await import(
+        "../../../utils/events/notification.event.js"
+      );
+      const tasksInSprint = await Task.find({
+        sprintId: updated._id,
+        isDeleted: false,
+      })
+        .select("assigneeId reporterId")
+        .lean();
+      const memberIds = [
+        ...new Set(
+          tasksInSprint
+            .flatMap((t) => [t.assigneeId, t.reporterId])
+            .filter(Boolean)
+            .map((id) => id.toString()),
+        ),
+      ].filter((id) => id !== req.user._id.toString());
+
+      if (memberIds.length > 0) {
+        notificationEvent.emit(
+          status === sprintStatus.Active ? "sprint_started" : "sprint_closed",
+          {
+            memberIds,
+            triggeredById: req.user._id,
+            sprintName: updated.name,
+            sprintId: updated._id,
+          },
+        );
+      }
+    } catch (err) {
+      // Notification fan-out failure must never block the status change
+      // — `track()` above is already persisted.
+    }
+  }
 
   return successResponse({ res, message: "Sprint status updated", data: updated }, 200);
 });

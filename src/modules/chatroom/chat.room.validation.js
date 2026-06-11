@@ -135,5 +135,20 @@ export const updateRoom = joi
     name: joi.string().min(2).max(100),
     description: joi.string().max(500).allow(""),
     isPrivate: joi.boolean(),
+    icon: joi.string().uri().allow("", null),
+    // Slack-style branding. Every field is optional and clearable.
+    // `color` is validated as a strict #RRGGBB so the FE can drop it
+    // into style attrs without re-validating.
+    branding: joi
+      .object({
+        color: joi
+          .string()
+          .pattern(/^#[0-9a-fA-F]{6}$/)
+          .allow("", null),
+        coverImage: joi.string().uri().allow("", null),
+        tagline: joi.string().max(140).allow("", null),
+        topic: joi.string().max(250).allow("", null),
+      })
+      .unknown(false),
   })
   .required();

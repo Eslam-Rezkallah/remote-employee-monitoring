@@ -42,9 +42,26 @@ export const config = Object.freeze({
     openaiApiKey: env.OPENAI_API_KEY,
     openaiModel: env.OPENAI_MODEL,
   },
-  // NEW: Redis config (Phase 2 will use)
+  // Redis (Phase 2)
   redis: {
     url: env.REDIS_URL || null,
-    enabled: Boolean(env.REDIS_URL),
+    // enabled iff a URL is configured AND REDIS_DISABLED is not true.
+    // The disabled flag is the dev-friendly escape hatch when you
+    // can't run Redis locally.
+    enabled: Boolean(env.REDIS_URL) && env.REDIS_DISABLED !== true,
+  },
+  // LiveKit SFU for scalable voice/video.
+  //   enabled === true iff all three required values are present.
+  //   apiSecret is kept inside this frozen config object only —
+  //   logger redact paths block it from ever reaching log lines.
+  livekit: {
+    url: env.LIVEKIT_URL || null,
+    apiKey: env.LIVEKIT_API_KEY || null,
+    apiSecret: env.LIVEKIT_API_SECRET || null,
+    tokenTtl: env.LIVEKIT_TOKEN_TTL,
+    webhookPath: env.LIVEKIT_WEBHOOK_PATH,
+    enabled: Boolean(
+      env.LIVEKIT_URL && env.LIVEKIT_API_KEY && env.LIVEKIT_API_SECRET,
+    ),
   },
 });

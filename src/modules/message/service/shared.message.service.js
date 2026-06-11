@@ -4,6 +4,12 @@
  * ── Single source of truth for message operations ──────────
  * Both REST (message.service.js) and Socket (chat.socket.js)
  * call these functions so bug fixes only need to happen once.
+ *
+ * ── Phase 2: Cache invalidation ────────────────────────────
+ * Unread-counts cache is invalidated when a user marks messages
+ * seen (their own count drops). Outgoing messages don't invalidate
+ * recipients' caches — the socket layer delivers real-time updates,
+ * and the 30s TTL handles fallback consistency.
  */
 
 import mongoose from "mongoose";
@@ -15,6 +21,11 @@ import reactionModel, {
 import userModel from "../../../DB/Model/user.model.js";
 import { cloud } from "../../../utils/multer/cloudinary.multer.js";
 import * as dbService from "../../../DB/db.service.js";
+import { invalidate, ckey } from "../../../utils/cache/cache.service.js";
+import { childLogger } from "../../../utils/logger/logger.js";
+import { httpError } from "../../../utils/errors/index.js";
+
+const log = childLogger("message-shared");
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -24,12 +35,98 @@ export const EDIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 export const DELETE_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 // ─────────────────────────────────────────────────────────────
+// SLASH COMMAND INTERCEPT
+// ─────────────────────────────────────────────────────────────
+
+// Wrapped in a try/catch so a buggy command never breaks the message
+// send path. Returns null when the content isn't a slash command.
+async function runSlashCommandIfAny({ content, userId, roomId }) {
+  try {
+    const { parseSlashIntent, dispatchSlash } = await import(
+      "../../../utils/slash/slash.registry.js"
+    );
+    const intent = parseSlashIntent(content);
+    if (!intent) return null;
+
+    const room = await chatRoomModel
+      .findOne({ _id: roomId, isDeleted: false })
+      .lean();
+    if (!room) return null;
+
+    // Resolve the user once for the handler (most commands need it).
+    const user = await userModel
+      .findById(userId)
+      .select("_id username email image")
+      .lean();
+    if (!user) return null;
+
+    return await dispatchSlash({ intent, user, room });
+  } catch (err) {
+    log.warn({ err: err.message }, "slash dispatch failed");
+    return null;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// MENTIONS
+// ─────────────────────────────────────────────────────────────
+
+// Matches @username — usernames are alphanumeric + underscore + dash.
+// Conservative: stops at whitespace or punctuation, so "@maitha." or
+// "@maitha," resolve to "maitha".
+const MENTION_RE = /@([a-zA-Z0-9_-]{2,30})/g;
+
+/**
+ * Pull @mentions from content and resolve to userIds, BUT only for
+ * usernames that are actual members of the chat room. This is the
+ * boundary that prevents notification spam — a typo'd @somebody-else
+ * won't notify a stranger.
+ *
+ * Returns deduped ObjectIds, excluding the sender themselves.
+ */
+export async function extractMentionsForRoom({
+  content,
+  roomId,
+  excludeUserId,
+}) {
+  if (!content) return [];
+  const usernames = new Set();
+  let m;
+  while ((m = MENTION_RE.exec(content)) !== null) {
+    usernames.add(m[1]);
+  }
+  if (usernames.size === 0) return [];
+
+  // Resolve usernames within the room's member set in one round-trip.
+  const room = await chatRoomModel
+    .findOne({ _id: roomId, isDeleted: false })
+    .select("members")
+    .lean();
+  if (!room) return [];
+
+  const users = await userModel
+    .find({
+      _id: { $in: room.members },
+      username: { $in: [...usernames] },
+      isDeleted: false,
+    })
+    .select("_id")
+    .lean();
+
+  const ids = users
+    .map((u) => u._id)
+    .filter((id) => id.toString() !== String(excludeUserId));
+
+  return ids;
+}
+
+// ─────────────────────────────────────────────────────────────
 // GUARDS
 // ─────────────────────────────────────────────────────────────
 
 export async function requireRoomMember(roomId, userId) {
   if (!mongoose.Types.ObjectId.isValid(roomId)) {
-    throw Object.assign(new Error("Invalid room ID"), { cause: 400 });
+    throw httpError(400, "Invalid room ID");
   }
   const room = await dbService.findOne({
     model: chatRoomModel,
@@ -40,9 +137,7 @@ export async function requireRoomMember(roomId, userId) {
     },
   });
   if (!room) {
-    throw Object.assign(new Error("Room not found or access denied"), {
-      cause: 404,
-    });
+    throw httpError(404, "Room not found or access denied");
   }
   return room;
 }
@@ -93,6 +188,20 @@ export async function uploadAttachments(files, userId, roomId) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// CACHE INVALIDATION HELPERS
+// ─────────────────────────────────────────────────────────────
+
+/** Drop a single user's unread-counts cache entry. */
+async function invalidateUserUnread(userId) {
+  try {
+    await invalidate(ckey("unread-counts", userId));
+  } catch (err) {
+    // Cache failures must never break the message flow
+    log.warn({ err, userId }, "unread cache invalidation failed");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
 // SEND MESSAGE
 // ─────────────────────────────────────────────────────────────
 
@@ -116,7 +225,7 @@ export async function createMessage({
       },
     });
     if (!parent) {
-      throw Object.assign(new Error("Reply target not found"), { cause: 404 });
+      throw httpError(404, "Reply target not found");
     }
   }
 
@@ -130,16 +239,12 @@ export async function createMessage({
       },
     });
     if (!source) {
-      throw Object.assign(new Error("Forwarded message not found"), {
-        cause: 404,
-      });
+      throw httpError(404, "Forwarded message not found");
     }
   }
 
   if (!content.trim() && !attachments.length) {
-    throw Object.assign(new Error("Message must have content or attachment"), {
-      cause: 400,
-    });
+    throw httpError(400, "Message must have content or attachment");
   }
 
   // Resolve message type from attachment if needed
@@ -149,6 +254,41 @@ export async function createMessage({
       attachments[0].type === "voice" ? "voice" : attachments[0].type;
   }
 
+  // Slash-command intercept. If the content starts with a registered
+  // /cmd, dispatch it instead of (or alongside) the normal save path.
+  // Done BEFORE mention extraction because the command might
+  // suppress the user message entirely.
+  const slashResult = await runSlashCommandIfAny({
+    content,
+    userId,
+    roomId,
+  });
+  if (slashResult?.suppressMessage) {
+    // Replace user content with the command's broadcast text (if any)
+    // so the timeline still has SOMETHING to render.
+    if (!slashResult.broadcast) {
+      // Pure ephemeral — caller gets the reply only, no DB row.
+      // Return a synthetic populated message-like object so callers
+      // (REST + socket) handle it identically.
+      return {
+        _id: null,
+        ephemeral: true,
+        replyToUser: slashResult.replyToUser || null,
+      };
+    }
+    content = slashResult.broadcast;
+    messageType = "system";
+  }
+
+  // Extract @mentions from content. We scope lookups to the room
+  // members so we never accidentally notify a stranger whose
+  // username matched the regex.
+  const mentions = await extractMentionsForRoom({
+    content,
+    roomId,
+    excludeUserId: userId,
+  });
+
   const message = await messageModel.create({
     chatRoomId: roomId,
     senderId: userId,
@@ -157,12 +297,60 @@ export async function createMessage({
     attachments,
     replyTo: replyTo || null,
     forwardedFrom: forwardedFrom || null,
+    mentions,
   });
 
   await chatRoomModel.updateOne(
     { _id: roomId },
     { lastMessage: message._id, lastMessageAt: new Date() },
   );
+
+  // If this is a reply, bump the parent's replyCount so thread
+  // listings can show "N replies" without a separate count query.
+  if (replyTo) {
+    await messageModel.updateOne(
+      { _id: replyTo },
+      { $inc: { replyCount: 1 } },
+    );
+  }
+
+  // Background unfurl: extract the first URL from the message and
+  // fetch its OG preview off the hot path. The message ships
+  // immediately; the FE re-renders when the preview lands.
+  (async () => {
+    try {
+      const { extractFirstUrl, unfurlOne } = await import(
+        "../../../utils/unfurl/unfurl.service.js"
+      );
+      const url = extractFirstUrl(content);
+      if (!url) return;
+      const preview = await unfurlOne(url);
+      if (!preview) return;
+      await messageModel.updateOne(
+        { _id: message._id },
+        { $set: { preview } },
+      );
+    } catch (err) {
+      log.debug({ err: err.message }, "background unfurl failed");
+    }
+  })();
+
+  // Fan out mention notifications. Like the comment_mention pattern,
+  // we go through the central event bus so the socket transport
+  // pushes them in real time and the DB row is persisted.
+  if (mentions.length > 0) {
+    // Lazy-imported to avoid a circular dep at module load time.
+    const { notificationEvent } = await import(
+      "../../../utils/events/notification.event.js"
+    );
+    notificationEvent.emit("message_mention", {
+      mentionedUserIds: mentions.map((m) => m.toString()),
+      triggeredById: userId,
+      roomId,
+      messageId: message._id,
+      contentPreview: content.trim().slice(0, 100),
+    });
+  }
 
   const populated = await messageModel
     .findById(message._id)
@@ -173,6 +361,11 @@ export async function createMessage({
       "content senderId messageType chatRoomId createdAt",
     )
     .lean();
+
+  // NOTE: We intentionally don't invalidate recipients' unread-counts cache
+  // here. Real-time delivery happens via socket "receive_message"; the cache
+  // is only a fallback for refetch scenarios where 30s staleness is OK.
+  // Invalidating on every send would add a Redis round-trip per message.
 
   return populated;
 }
@@ -192,19 +385,15 @@ export async function editMessageById({ roomId, messageId, userId, content }) {
   });
 
   if (!message) {
-    throw Object.assign(new Error("Message not found"), { cause: 404 });
+    throw httpError(404, "Message not found");
   }
   if (message.senderId.toString() !== userId.toString()) {
-    throw Object.assign(new Error("Can only edit your own messages"), {
-      cause: 403,
-    });
+    throw httpError(403, "Can only edit your own messages");
   }
 
   const age = Date.now() - new Date(message.createdAt).getTime();
   if (age > EDIT_WINDOW_MS) {
-    throw Object.assign(new Error("Edit window expired (1 hour)"), {
-      cause: 403,
-    });
+    throw httpError(403, "Edit window expired (1 hour)");
   }
 
   const editedAt = new Date();
@@ -237,23 +426,17 @@ export async function deleteMessageById({
   });
 
   if (!message) {
-    throw Object.assign(new Error("Message not found"), { cause: 404 });
+    throw httpError(404, "Message not found");
   }
 
   const age = Date.now() - new Date(message.createdAt).getTime();
 
   if (deleteType === "everyone") {
     if (message.senderId.toString() !== userId.toString()) {
-      throw Object.assign(
-        new Error("Can only delete your own messages for everyone"),
-        { cause: 403 },
-      );
+      throw httpError(403, "Can only delete your own messages for everyone");
     }
     if (age > DELETE_WINDOW_MS) {
-      throw Object.assign(
-        new Error("Delete-for-everyone window expired (1 hour)"),
-        { cause: 403 },
-      );
+      throw httpError(403, "Delete-for-everyone window expired (1 hour)");
     }
 
     await messageModel.updateOne(
@@ -274,6 +457,10 @@ export async function deleteMessageById({
     { _id: messageId },
     { $addToSet: { deletedFor: userId } },
   );
+
+  // The deleting user's unread count may drop if this was an unseen message
+  // they're hiding for themselves. Invalidate their cache to be safe.
+  await invalidateUserUnread(userId);
 
   return { deleteType: "me" };
 }
@@ -298,7 +485,7 @@ export async function markMessagesSeen({ roomId, messageId, userId }) {
     .select("createdAt");
 
   if (!pivotMsg) {
-    throw Object.assign(new Error("Message not found"), { cause: 404 });
+    throw httpError(404, "Message not found");
   }
 
   const result = await messageModel.updateMany(
@@ -317,6 +504,12 @@ export async function markMessagesSeen({ roomId, messageId, userId }) {
     .select("readReceipts")
     .lean();
   const broadcastSeen = userDoc?.readReceipts !== false; // default true
+
+  // Invalidate THIS user's unread-counts cache — they just saw messages
+  // so their next /unread-counts call must reflect the drop immediately.
+  if (result.modifiedCount > 0) {
+    await invalidateUserUnread(userId);
+  }
 
   return {
     modifiedCount: result.modifiedCount,
@@ -338,9 +531,9 @@ export async function addReactionToMessage({
   reaction,
 }) {
   if (!validReactions.includes(reaction)) {
-    throw Object.assign(
-      new Error(`Invalid reaction. Allowed: ${validReactions.join(", ")}`),
-      { cause: 400 },
+    throw httpError(
+      400,
+      `Invalid reaction. Allowed: ${validReactions.join(", ")}`,
     );
   }
 
@@ -350,7 +543,7 @@ export async function addReactionToMessage({
     deletedForEveryone: false,
   });
   if (!message) {
-    throw Object.assign(new Error("Message not found"), { cause: 404 });
+    throw httpError(404, "Message not found");
   }
 
   const existing = await dbService.findOne({
@@ -382,7 +575,6 @@ export async function addReactionToMessage({
     );
   }
 
-  // FIX: use model.aggregate directly — dbService has no aggregate method
   const summary = await reactionModel.aggregate([
     { $match: { messageId: message._id } },
     { $group: { _id: "$reaction", count: { $sum: 1 } } },
@@ -402,7 +594,7 @@ export async function removeReactionFromMessage({ roomId, messageId, userId }) {
   });
 
   if (!reactionDoc) {
-    throw Object.assign(new Error("Reaction not found"), { cause: 404 });
+    throw httpError(404, "Reaction not found");
   }
 
   await messageModel.updateOne(
@@ -410,7 +602,6 @@ export async function removeReactionFromMessage({ roomId, messageId, userId }) {
     { $pull: { reactions: reactionDoc._id } },
   );
 
-  // FIX: use model.aggregate directly — dbService has no aggregate method
   const summary = await reactionModel.aggregate([
     { $match: { messageId: reactionDoc.messageId } },
     { $group: { _id: "$reaction", count: { $sum: 1 } } },
@@ -438,7 +629,7 @@ export async function forwardMessage({
   });
 
   if (!sourceMsg) {
-    throw Object.assign(new Error("Source message not found"), { cause: 404 });
+    throw httpError(404, "Source message not found");
   }
 
   // Verify membership in source room
@@ -448,12 +639,10 @@ export async function forwardMessage({
 
   // Cannot forward to the same room
   if (sourceMsg.chatRoomId.toString() === targetRoomId.toString()) {
-    throw Object.assign(new Error("Cannot forward to the same room"), {
-      cause: 400,
-    });
+    throw httpError(400, "Cannot forward to the same room");
   }
 
-  // Create forwarded message
+  // Create forwarded message — cache rules from createMessage apply here too
   const forwarded = await createMessage({
     roomId: targetRoomId,
     userId,

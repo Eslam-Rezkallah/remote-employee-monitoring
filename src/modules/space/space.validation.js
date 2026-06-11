@@ -33,6 +33,21 @@ export const spaceViews = joi.object({
   spaceId: generalFields.id.required(),
 }).required();
 
+// GET / DELETE  → just IDs
+export const spaceIdParam = joi.object({
+  orgId: generalFields.id.required(),
+  spaceId: generalFields.id.required(),
+}).required();
+
+// PATCH /spaces/:spaceId — all fields optional
+export const updateSpace = joi.object({
+  orgId: generalFields.id.required(),
+  spaceId: generalFields.id.required(),
+  name: joi.string().min(2).max(100).trim(),
+  icon: joi.string().max(20).allow(""),
+  type: joi.string().valid(...Object.values(spaceTypes)),
+}).required();
+
 export const statusSummary = joi.object({
   orgId: generalFields.id.required(),
   spaceId: generalFields.id.required(),

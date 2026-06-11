@@ -1,19 +1,30 @@
 /**
  * modules/socket/service/chat.socket.js
  *
- * ── REFACTORED ──────────────────────────────────────────────
- * All message operations now delegate to shared.message.service.js
+ * ── Phase 2 ─────────────────────────────────────────────────
+ * Presence tracking moved to utils/presence/presence.service.js
+ * (Redis-backed with in-memory fallback). All console.* calls
+ * replaced with structured Pino logger.
+ *
+ * ── Existing behavior preserved ─────────────────────────────
+ * All message operations delegate to shared.message.service.js
  * so logic is never duplicated between REST and Socket paths.
  */
 
 import mongoose from "mongoose";
 import chatRoomModel from "../../../DB/Model/chatroom.model.js";
 import messageModel from "../../../DB/Model/message.model.js";
-import { validReactions } from "../../../DB/Model/reaction.model.js";
-import { socketConnection } from "../../../DB/Model/user.model.js";
 import { authentication } from "../../../middleware/socket/auth.middleware.js";
+import { childLogger } from "../../../utils/logger/logger.js";
 
-// ── Shared service ────────────────────────────────────────────
+// ── Presence service (replaces socketConnection Map) ──────────
+import {
+  markOnline,
+  markOffline,
+  whichAreOnline,
+} from "../../../utils/presence/presence.service.js";
+
+// ── Shared message service ────────────────────────────────────
 import {
   requireRoomMember,
   createMessage,
@@ -25,8 +36,10 @@ import {
   forwardMessage,
 } from "../../message/service/shared.message.service.js";
 
+const log = childLogger("chat-socket");
+
 // ─────────────────────────────────────────────────────────────
-// CONSTANTS
+// EVENT CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
 const EVENTS = {
@@ -62,7 +75,6 @@ const EVENTS = {
   MESSAGE_EDITED: "message_edited",
   MESSAGE_DELETED: "message_deleted",
 
-  // ✅ NEW
   FORWARD_MESSAGE: "forward_message",
   MESSAGE_FORWARDED: "message_forwarded",
 
@@ -74,39 +86,6 @@ const EVENTS = {
   ROOM_CREATED: "room_created",
   MESSAGE_DELIVERY_STATUS: "message_delivery_status",
 };
-
-// ─────────────────────────────────────────────────────────────
-// PRESENCE HELPERS
-// ─────────────────────────────────────────────────────────────
-
-function markUserOnline(userId, socketId) {
-  const key = userId.toString();
-  const existing = socketConnection.get(key);
-  if (existing instanceof Set) {
-    existing.add(socketId);
-  } else {
-    const prev = existing ? new Set([existing]) : new Set();
-    prev.add(socketId);
-    socketConnection.set(key, prev);
-  }
-}
-
-function markUserOffline(userId, socketId) {
-  const key = userId.toString();
-  const val = socketConnection.get(key);
-  if (val instanceof Set) {
-    val.delete(socketId);
-    if (val.size === 0) socketConnection.delete(key);
-  } else if (val === socketId) {
-    socketConnection.delete(key);
-  }
-}
-
-function isUserOnline(userId) {
-  const val = socketConnection.get(userId.toString());
-  if (val instanceof Set) return val.size > 0;
-  return !!val;
-}
 
 // ─────────────────────────────────────────────────────────────
 // UTILITY
@@ -126,11 +105,13 @@ async function isRoomMember(roomId, userId) {
 
 // ─────────────────────────────────────────────────────────────
 // BROADCAST ROOM CREATED
+// Called by REST chat.service.js after a room is created so
+// every member's connected sockets get an immediate sidebar update.
 // ─────────────────────────────────────────────────────────────
 
 function broadcastRoomCreated(namespace, room) {
   if (!room || !room.members) return;
-  room.members.forEach((memberId) => {
+  for (const memberId of room.members) {
     const id = memberId.toString ? memberId.toString() : String(memberId);
     namespace.to(`user_${id}`).emit(EVENTS.ROOM_CREATED, {
       room: {
@@ -144,7 +125,7 @@ function broadcastRoomCreated(namespace, room) {
         createdAt: room.createdAt,
       },
     });
-  });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -156,6 +137,10 @@ export const registerChatSocket = (namespace) => {
   namespace.use(async (socket, next) => {
     const { data, valid } = await authentication({ socket });
     if (!valid) {
+      log.warn(
+        { reason: data?.message, status: data?.status },
+        "socket auth rejected",
+      );
       return next(new Error(data?.message || "Unauthorized"));
     }
     socket.user = data.user;
@@ -166,17 +151,28 @@ export const registerChatSocket = (namespace) => {
     const user = socket.user;
     const userId = user._id.toString();
 
-    console.log(`[Chat Socket] Connected: ${user.username} (${userId})`);
+    log.info(
+      { userId, username: user.username, socketId: socket.id },
+      "socket connected",
+    );
 
-    markUserOnline(userId, socket.id);
+    // ── Mark online (Redis-backed) ───────────────────────────
+    try {
+      await markOnline(userId, socket.id);
+    } catch (err) {
+      log.error({ err, userId }, "markOnline failed");
+    }
+
+    // Join personal room for direct emits (notifications, etc.)
     socket.join(`user_${userId}`);
 
+    // ── Auto-join all rooms this user is a member of ─────────
     try {
       const rooms = await chatRoomModel
         .find({ members: userId, isDeleted: false })
         .select("_id")
         .lean();
-      rooms.forEach((r) => socket.join(`room:${r._id}`));
+      for (const r of rooms) socket.join(`room:${r._id}`);
 
       socket.broadcast.emit(EVENTS.USER_ONLINE, {
         userId,
@@ -184,7 +180,7 @@ export const registerChatSocket = (namespace) => {
         image: user.image,
       });
     } catch (err) {
-      console.error("[Chat Socket] Error auto-joining rooms:", err.message);
+      log.error({ err, userId }, "auto-join rooms failed");
     }
 
     // ── JOIN_ROOM ────────────────────────────────────────────
@@ -199,13 +195,18 @@ export const registerChatSocket = (namespace) => {
 
         socket.join(`room:${roomId}`);
 
+        // Mark unseen messages as delivered
         const deliverResult = await messageModel.updateMany(
           {
             chatRoomId: roomId,
             "deliveredTo.userId": { $ne: userId },
             senderId: { $ne: userId },
           },
-          { $addToSet: { deliveredTo: { userId, deliveredAt: new Date() } } },
+          {
+            $addToSet: {
+              deliveredTo: { userId, deliveredAt: new Date() },
+            },
+          },
         );
 
         socket.emit(EVENTS.ROOM_JOINED, { roomId });
@@ -219,6 +220,7 @@ export const registerChatSocket = (namespace) => {
           });
         }
       } catch (err) {
+        log.error({ err, userId, roomId }, "JOIN_ROOM error");
         emitError(socket, EVENTS.JOIN_ROOM, err.message);
       }
     });
@@ -232,7 +234,6 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── SEND_MESSAGE ─────────────────────────────────────────
-    // ✅ Now uses shared createMessage()
     socket.on(EVENTS.SEND_MESSAGE, async (payload) => {
       try {
         const {
@@ -271,12 +272,12 @@ export const registerChatSocket = (namespace) => {
           roomId,
         });
       } catch (err) {
+        log.error({ err, userId }, "SEND_MESSAGE error");
         emitError(socket, EVENTS.SEND_MESSAGE, err.message);
       }
     });
 
     // ── FORWARD_MESSAGE ──────────────────────────────────────
-    // ✅ NEW: Forward a message to another room via socket
     socket.on(
       EVENTS.FORWARD_MESSAGE,
       async ({ sourceMessageId, targetRoomId }) => {
@@ -307,6 +308,10 @@ export const registerChatSocket = (namespace) => {
             targetRoomId,
           });
         } catch (err) {
+          log.error(
+            { err, userId, sourceMessageId, targetRoomId },
+            "FORWARD_MESSAGE error",
+          );
           emitError(socket, EVENTS.FORWARD_MESSAGE, err.message);
         }
       },
@@ -331,43 +336,46 @@ export const registerChatSocket = (namespace) => {
     });
 
     // ── MESSAGE_SEEN ─────────────────────────────────────────
-    // ✅ Now uses shared markMessagesSeen()
-  socket.on(EVENTS.MESSAGE_SEEN, async ({ roomId, messageId }) => {
-    try {
-      if (!roomId || !messageId) return;
+    socket.on(EVENTS.MESSAGE_SEEN, async ({ roomId, messageId }) => {
+      try {
+        if (!roomId || !messageId) return;
 
-      const isMember = await isRoomMember(roomId, userId);
-      if (!isMember) return;
+        const isMember = await isRoomMember(roomId, userId);
+        if (!isMember) return;
 
-      const { modifiedCount, broadcastSeen } = await markMessagesSeen({
-        roomId,
-        messageId,
-        userId,
-      });
-
-      // Only broadcast if user has read receipts enabled
-      if (modifiedCount > 0 && broadcastSeen) {
-        socket.to(`room:${roomId}`).emit(EVENTS.MESSAGES_SEEN, {
+        const { modifiedCount, broadcastSeen } = await markMessagesSeen({
           roomId,
           messageId,
-          seenBy: { userId, username: user.username, seenAt: new Date() },
-        });
-
-        namespace.to(`room:${roomId}`).emit(EVENTS.MESSAGE_DELIVERY_STATUS, {
-          roomId,
-          messageId,
-          status: "seen",
           userId,
-          username: user.username,
         });
+
+        // Only broadcast read receipts if user has them enabled
+        if (modifiedCount > 0 && broadcastSeen) {
+          socket.to(`room:${roomId}`).emit(EVENTS.MESSAGES_SEEN, {
+            roomId,
+            messageId,
+            seenBy: {
+              userId,
+              username: user.username,
+              seenAt: new Date(),
+            },
+          });
+
+          namespace.to(`room:${roomId}`).emit(EVENTS.MESSAGE_DELIVERY_STATUS, {
+            roomId,
+            messageId,
+            status: "seen",
+            userId,
+            username: user.username,
+          });
+        }
+      } catch (err) {
+        log.error({ err, userId, roomId, messageId }, "MESSAGE_SEEN error");
+        emitError(socket, EVENTS.MESSAGE_SEEN, err.message);
       }
-    } catch (err) {
-      emitError(socket, EVENTS.MESSAGE_SEEN, err.message);
-    }
-  });
+    });
 
     // ── ADD_REACTION ─────────────────────────────────────────
-    // ✅ Now uses shared addReactionToMessage()
     socket.on(EVENTS.ADD_REACTION, async ({ roomId, messageId, reaction }) => {
       try {
         if (!roomId || !messageId || !reaction) return;
@@ -394,12 +402,15 @@ export const registerChatSocket = (namespace) => {
           summary: result.summary,
         });
       } catch (err) {
+        log.error(
+          { err, userId, roomId, messageId, reaction },
+          "ADD_REACTION error",
+        );
         emitError(socket, EVENTS.ADD_REACTION, err.message);
       }
     });
 
     // ── REMOVE_REACTION ──────────────────────────────────────
-    // ✅ Now uses shared removeReactionFromMessage()
     socket.on(EVENTS.REMOVE_REACTION, async ({ roomId, messageId }) => {
       try {
         if (!roomId || !messageId) return;
@@ -419,12 +430,12 @@ export const registerChatSocket = (namespace) => {
           summary,
         });
       } catch (err) {
+        log.error({ err, userId, roomId, messageId }, "REMOVE_REACTION error");
         emitError(socket, EVENTS.REMOVE_REACTION, err.message);
       }
     });
 
     // ── EDIT_MESSAGE ─────────────────────────────────────────
-    // ✅ Now uses shared editMessageById()
     socket.on(EVENTS.EDIT_MESSAGE, async ({ roomId, messageId, content }) => {
       try {
         if (!roomId || !messageId || !content?.trim())
@@ -453,12 +464,12 @@ export const registerChatSocket = (namespace) => {
           editedBy: userId,
         });
       } catch (err) {
+        log.error({ err, userId, roomId, messageId }, "EDIT_MESSAGE error");
         emitError(socket, EVENTS.EDIT_MESSAGE, err.message);
       }
     });
 
     // ── DELETE_MESSAGE ───────────────────────────────────────
-    // ✅ Now uses shared deleteMessageById()
     socket.on(
       EVENTS.DELETE_MESSAGE,
       async ({ roomId, messageId, deleteType = "me" }) => {
@@ -501,6 +512,10 @@ export const registerChatSocket = (namespace) => {
             });
           }
         } catch (err) {
+          log.error(
+            { err, userId, roomId, messageId, deleteType },
+            "DELETE_MESSAGE error",
+          );
           emitError(socket, EVENTS.DELETE_MESSAGE, err.message);
         }
       },
@@ -519,34 +534,43 @@ export const registerChatSocket = (namespace) => {
           .lean();
         if (!room) return;
 
-        const onlineUserIds = room.members
-          .map((m) => m.toString())
-          .filter((id) => isUserOnline(id));
+        const memberIds = room.members.map((m) => m.toString());
+        const onlineUserIds = await whichAreOnline(memberIds);
 
         socket.emit(EVENTS.ONLINE_USERS, { roomId, onlineUserIds });
       } catch (err) {
+        log.error({ err, userId, roomId }, "GET_ONLINE_USERS error");
         emitError(socket, EVENTS.GET_ONLINE_USERS, err.message);
       }
     });
 
     // ── DISCONNECT ───────────────────────────────────────────
-    socket.on(EVENTS.DISCONNECT, (reason) => {
-      console.log(
-        `[Chat Socket] Disconnected: ${user.username} — reason: ${reason}`,
+    socket.on(EVENTS.DISCONNECT, async (reason) => {
+      log.info(
+        { userId, username: user.username, socketId: socket.id, reason },
+        "socket disconnected",
       );
-      markUserOffline(userId, socket.id);
 
-      if (!isUserOnline(userId)) {
-        socket.broadcast.emit(EVENTS.USER_OFFLINE, {
-          userId,
-          username: user.username,
-          lastSeen: new Date(),
-        });
+      try {
+        // markOffline returns true if this was the user's LAST socket
+        // across all instances (Redis-backed) — only then we broadcast offline.
+        const fullyOffline = await markOffline(userId, socket.id);
+
+        if (fullyOffline) {
+          socket.broadcast.emit(EVENTS.USER_OFFLINE, {
+            userId,
+            username: user.username,
+            lastSeen: new Date(),
+          });
+        }
+      } catch (err) {
+        log.error({ err, userId }, "disconnect cleanup failed");
       }
     });
   });
 
-  // expose broadcastRoomCreated so REST chat.service.js can use it
+  // Expose broadcastRoomCreated so REST chat.service.js can call it
+  // through getChatNamespace().broadcastRoomCreated(room)
   namespace.broadcastRoomCreated = (room) =>
     broadcastRoomCreated(namespace, room);
 };

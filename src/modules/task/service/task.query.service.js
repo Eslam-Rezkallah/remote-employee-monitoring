@@ -1,24 +1,17 @@
 import Task from "../../../DB/Model/task.model.js";
 import Space from "../../../DB/Model/space.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 async function requireSpace(spaceId, orgId) {
   const space = await dbService.findOne({
     model: Space,
     filter: { _id: spaceId, organizationId: orgId, isDeleted: false },
   });
-  if (!space) throw new Error("Space not found", { cause: 404 });
+  if (!space) throw httpError(404, "Space not found");
 }
 
 // GET /org/:orgId/spaces/:spaceId/backlog?status=&priority=&assigneeId=&q=&page=&limit=

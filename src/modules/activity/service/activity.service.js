@@ -1,17 +1,9 @@
 import RecentActivity from "../../../DB/Model/recentActivity.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
 
 function groupByDay(items) {
   const grouped = {};

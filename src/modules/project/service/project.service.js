@@ -1,3 +1,20 @@
+/**
+ * ⚠️ DEPRECATED MODULE — kept for backwards compatibility only.
+ *
+ * The active task hierarchy in this product is:
+ *   Organization → Space → Task   (see modules/space + modules/task)
+ *
+ * The Project module is no longer the canonical container for tasks
+ * (the FE is built around Spaces). Do not add new features here.
+ * Open issues:
+ *   - Project ↔ Space relationship is undefined
+ *   - Tasks don't reference projectId; they reference spaceId
+ *
+ * Migration plan (future):
+ *   - Either drop the Project module entirely once analytics confirm
+ *     no live clients call its endpoints,
+ *   - OR add `Space.projectId` to bridge the two trees.
+ */
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import * as dbService from "../../../DB/db.service.js";
@@ -5,6 +22,8 @@ import projectModel from "../../../DB/Model/project.model.js";
 import teamModel from "../../../DB/Model/team.model.js";
 import memberModel, { memberRoles } from "../../../DB/Model/member.model.js";
 import { notificationEvent } from "../../../utils/events/notification.event.js";
+import { syncProjectChannelMembership } from "../../chatroom/service/chat.sync.service.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // ── Shared populate config ────────────────────────────────────
 const projectPopulate = [
@@ -56,7 +75,7 @@ export const createProject = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -68,16 +87,13 @@ export const createProject = asyncHandler(async (req, res, next) => {
 
   if (!team) {
     return next(
-      new Error("Team not found in this organization", { cause: 404 }),
+      httpError(404, "Team not found in this organization"),
     );
   }
 
   if (!canCreateProject(team, req.user._id, membership)) {
     return next(
-      new Error(
-        "Only a manager of this team or an org Admin/Owner can create a project",
-        { cause: 403 },
-      ),
+      httpError(403, "Only a manager of this team or an org Admin/Owner can create a project"),
     );
   }
 
@@ -93,16 +109,13 @@ export const createProject = asyncHandler(async (req, res, next) => {
 
     if (validMembers.length !== members.length) {
       return next(
-        new Error(
-          "One or more members are not active members of this organization",
-          { cause: 400 },
-        ),
+        httpError(400, "One or more members are not active members of this organization"),
       );
     }
   }
 
   if (startDate && endDate && new Date(endDate) <= new Date(startDate)) {
-    return next(new Error("End date must be after start date", { cause: 400 }));
+    return next(httpError(400, "End date must be after start date"));
   }
 
   const uniqueMembers = [
@@ -168,7 +181,7 @@ export const listProjects = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -182,19 +195,23 @@ export const listProjects = asyncHandler(async (req, res, next) => {
   if (teamId) filter.team = teamId;
   if (search) filter.$text = { $search: search };
 
-  const projects = await dbService.find({
-    model: projectModel,
-    filter,
-    populate: [
-      { path: "team", select: "name" },
-      { path: "manager", select: "username email image" },
-      { path: "members", select: "username email image" },
-    ],
-    skip,
-    limit,
-  });
-
-  const total = projects.length;
+  // FIX: previous code returned `total = projects.length` which is just
+  // the current page size — clients couldn't compute correct page counts.
+  // Use a real countDocuments alongside the page query.
+  const [projects, total] = await Promise.all([
+    dbService.find({
+      model: projectModel,
+      filter,
+      populate: [
+        { path: "team", select: "name" },
+        { path: "manager", select: "username email image" },
+        { path: "members", select: "username email image" },
+      ],
+      skip,
+      limit,
+    }),
+    dbService.countDocuments({ model: projectModel, filter }),
+  ]);
 
   return successResponse({
     res,
@@ -219,7 +236,7 @@ export const getProject = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -234,7 +251,7 @@ export const getProject = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   const isMember = project.members.some(
@@ -243,7 +260,7 @@ export const getProject = asyncHandler(async (req, res, next) => {
 
   if (!isOrgAdminOrOwner(membership) && !isMember) {
     return next(
-      new Error("You do not have access to this project", { cause: 403 }),
+      httpError(403, "You do not have access to this project"),
     );
   }
 
@@ -260,7 +277,7 @@ export const updateProject = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -274,15 +291,12 @@ export const updateProject = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   if (!canManageProject(project, req.user._id, membership)) {
     return next(
-      new Error(
-        "Only the project manager or org Admin/Owner can update this project",
-        { cause: 403 },
-      ),
+      httpError(403, "Only the project manager or org Admin/Owner can update this project"),
     );
   }
 
@@ -290,7 +304,7 @@ export const updateProject = asyncHandler(async (req, res, next) => {
   const resolvedEnd = endDate ? new Date(endDate) : project.endDate;
 
   if (resolvedStart && resolvedEnd && resolvedEnd <= resolvedStart) {
-    return next(new Error("End date must be after start date", { cause: 400 }));
+    return next(httpError(400, "End date must be after start date"));
   }
 
   const updateData = {};
@@ -324,7 +338,7 @@ export const updateProjectStatus = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -338,20 +352,17 @@ export const updateProjectStatus = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   if (!canManageProject(project, req.user._id, membership)) {
     return next(
-      new Error(
-        "Only the project manager or org Admin/Owner can change project status",
-        { cause: 403 },
-      ),
+      httpError(403, "Only the project manager or org Admin/Owner can change project status"),
     );
   }
 
   if (project.status === status) {
-    return next(new Error(`Project is already ${status}`, { cause: 400 }));
+    return next(httpError(400, `Project is already ${status}`));
   }
 
   const updated = await dbService.findOneAndUpdate({
@@ -379,10 +390,7 @@ export const transferManager = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!isOrgAdminOrOwner(membership)) {
     return next(
-      new Error(
-        "Only org Admins or Owners can transfer the project manager role",
-        { cause: 403 },
-      ),
+      httpError(403, "Only org Admins or Owners can transfer the project manager role"),
     );
   }
 
@@ -396,7 +404,7 @@ export const transferManager = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   const isMember = project.members
@@ -405,15 +413,13 @@ export const transferManager = asyncHandler(async (req, res, next) => {
 
   if (!isMember) {
     return next(
-      new Error("New manager must already be a member of the project", {
-        cause: 400,
-      }),
+      httpError(400, "New manager must already be a member of the project"),
     );
   }
 
   if (project.manager.toString() === newManagerId) {
     return next(
-      new Error("This user is already the project manager", { cause: 400 }),
+      httpError(400, "This user is already the project manager"),
     );
   }
 
@@ -424,6 +430,9 @@ export const transferManager = asyncHandler(async (req, res, next) => {
     options: { new: true },
     populate: projectPopulate,
   });
+
+  // New manager must become admin of the project channels.
+  syncProjectChannelMembership(project._id);
 
   return successResponse({
     res,
@@ -441,7 +450,7 @@ export const addMember = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -455,23 +464,19 @@ export const addMember = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   if (!canManageProject(project, req.user._id, membership)) {
     return next(
-      new Error("Only the project manager or org Admin/Owner can add members", {
-        cause: 403,
-      }),
+      httpError(403, "Only the project manager or org Admin/Owner can add members"),
     );
   }
 
   const targetMembership = await getOrgMembership(memberId, orgId);
   if (!targetMembership) {
     return next(
-      new Error("User is not an active member of this organization", {
-        cause: 400,
-      }),
+      httpError(400, "User is not an active member of this organization"),
     );
   }
 
@@ -481,7 +486,7 @@ export const addMember = asyncHandler(async (req, res, next) => {
 
   if (alreadyMember) {
     return next(
-      new Error("User is already a member of this project", { cause: 409 }),
+      httpError(409, "User is already a member of this project"),
     );
   }
 
@@ -501,6 +506,9 @@ export const addMember = asyncHandler(async (req, res, next) => {
     projectId: project._id,
   });
 
+  // Sync project-scoped channels so the new member appears in them.
+  syncProjectChannelMembership(project._id);
+
   return successResponse({
     res,
     message: "Member added successfully",
@@ -517,7 +525,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
@@ -531,24 +539,18 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   if (!canManageProject(project, req.user._id, membership)) {
     return next(
-      new Error(
-        "Only the project manager or org Admin/Owner can remove members",
-        { cause: 403 },
-      ),
+      httpError(403, "Only the project manager or org Admin/Owner can remove members"),
     );
   }
 
   if (project.manager.toString() === memberId) {
     return next(
-      new Error(
-        "Cannot remove the project manager. Transfer manager role first.",
-        { cause: 400 },
-      ),
+      httpError(400, "Cannot remove the project manager. Transfer manager role first."),
     );
   }
 
@@ -556,7 +558,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
 
   if (!isMember) {
     return next(
-      new Error("User is not a member of this project", { cause: 404 }),
+      httpError(404, "User is not a member of this project"),
     );
   }
 
@@ -575,6 +577,9 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     projectId: project._id,
   });
 
+  // Drop the removed member from project channels + kick their sockets.
+  syncProjectChannelMembership(project._id);
+
   return successResponse({
     res,
     message: "Member removed successfully",
@@ -591,9 +596,7 @@ export const deleteProject = asyncHandler(async (req, res, next) => {
   const membership = await getOrgMembership(req.user._id, orgId);
   if (!isOrgAdminOrOwner(membership)) {
     return next(
-      new Error("Only org Admins or Owners can delete projects", {
-        cause: 403,
-      }),
+      httpError(403, "Only org Admins or Owners can delete projects"),
     );
   }
 
@@ -607,7 +610,7 @@ export const deleteProject = asyncHandler(async (req, res, next) => {
   });
 
   if (!project) {
-    return next(new Error("Project not found", { cause: 404 }));
+    return next(httpError(404, "Project not found"));
   }
 
   await dbService.findOneAndUpdate({

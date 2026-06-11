@@ -1,0 +1,5063 @@
+{
+  "info": {
+    "_postman_id": "rem-full-2026-06",
+    "name": "REM — Full Backend",
+    "description": "Complete coverage of the REM backend.\n\nTest-data examples baked into every request body. Auto-saves chain IDs across folders so a top-to-bottom run requires only:\n  • testEmail, testPassword, targetUserId set in the env\nLogin auto-saves accessToken / refreshToken / userId; later folders save organizationId, teamId, spaceId, taskId, sprintId, roomId, messageId, callId, sessionId, etc.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Health & Docs",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /readyz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/readyz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "readyz"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "metrics"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /docs (Swagger)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "docs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /docs/openapi.json",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/docs/openapi.json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "docs",
+                "openapi.json"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "POST /auth/signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "signup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"qa_tester\",\n  \"email\": \"qa@example.com\",\n  \"password\": \"TestPass123!\",\n  \"confirmPassword\": \"TestPass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /auth/confirm-email (paste OTP)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/confirm-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "confirm-email"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa@example.com\",\n  \"otp\": \"REPLACE_OTP_FROM_INBOX\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login (saves accessToken, refreshToken, userId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa@example.com\",\n  \"password\": \"TestPass123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data?.accessToken)  pm.environment.set('accessToken',  j.data.accessToken);",
+                  "if (j.data?.refreshToken) pm.environment.set('refreshToken', j.data.refreshToken);",
+                  "if (j.data?.user?._id)    pm.environment.set('userId',       j.data.user._id);",
+                  "console.log('Saved session for', j.data?.user?.email);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /auth/refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /auth/forget-password (request OTP)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/forget-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "forget-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa@example.com\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /auth/validate-forget-password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/validate-forget-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "validate-forget-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa@example.com\",\n  \"code\": \"REPLACE_OTP\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /auth/reset-password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "reset-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"qa@example.com\",\n  \"password\": \"TestPass123!\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/logout-all (revoke every session)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/logout-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "logout-all"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Organizations & Members",
+      "item": [
+        {
+          "name": "POST /org (create) → saves organizationId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Acme Corp\",\n  \"slug\": \"qa-acme\",\n  \"logo\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id || j.data?.organization?._id;",
+                  "  if (v) { pm.environment.set('organizationId', v); console.log('saved organizationId', v); }",
+                  "} catch (e) { console.warn('organizationId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /org/me (my orgs)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /org/:orgId (rename)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Acme Corp (renamed)\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /org/:orgId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/members",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "members"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /org/:orgId/members/:memberId/role",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/members/{{targetUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "members",
+                "{{targetUserId}}",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /org/:orgId/members/:memberId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/members/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "members",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /org/:orgId/leave",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "leave"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /org/:orgId/invitations (send email invite)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/invitations",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "invitations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"teammate@example.com\",\n  \"role\": \"member\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/org-join (joinCode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/org-join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "org-join"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"joinCode\": \"REPLACE_JOIN_CODE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/work-sessions (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/work-sessions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "work-sessions"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/chat-rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/chat-rooms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "chat-rooms"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Teams",
+      "item": [
+        {
+          "name": "POST /teams (create) → saves teamId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"name\": \"Backend Squad\",\n  \"description\": \"Owns API + infra\",\n  \"members\": [],\n  \"managers\": []\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?.team?._id;",
+                  "  if (v) { pm.environment.set('teamId', v); console.log('saved teamId', v); }",
+                  "} catch (e) { console.warn('teamId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /teams?organizationId=",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams"
+              ],
+              "query": [
+                {
+                  "key": "organizationId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /teams/:teamId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /teams/:teamId",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Backend Squad\",\n  \"description\": \"Owns API + infra (updated)\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /teams/:teamId/members/:userId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}/members/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}",
+                "members",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /teams/:teamId/managers/:userId (promote)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}/managers/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}",
+                "managers",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /teams/:teamId/managers/:userId (demote)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}/managers/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}",
+                "managers",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /teams/:teamId/members/:userId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}/members/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}",
+                "members",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /teams/:teamId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/teams/{{teamId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "teams",
+                "{{teamId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Spaces & Workflows",
+      "item": [
+        {
+          "name": "POST /org/:orgId/spaces → saves spaceId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mobile App v2\",\n  \"type\": \"Project\",\n  \"icon\": \"🚀\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('spaceId', v); console.log('saved spaceId', v); }",
+                  "} catch (e) { console.warn('spaceId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /org/:orgId/spaces",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/search?q=",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "mobile"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /org/:orgId/spaces/:spaceId (rename)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Mobile App v2 v3\",\n  \"icon\": \"📱\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /org/:orgId/spaces/:spaceId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/views",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/views",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "views"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/summary/status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/summary/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "summary",
+                "status"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/summary/priority",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/summary/priority",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "summary",
+                "priority"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/summary/workload",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/summary/workload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "summary",
+                "workload"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/calendar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "calendar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /org/:orgId/spaces/:spaceId/timeline",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/timeline",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "timeline"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET workflow",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "workflow"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST workflow (upsert custom Kanban)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "workflow"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Engineering flow\",\n  \"statuses\": [\n    {\n      \"key\": \"Todo\",\n      \"label\": \"To do\",\n      \"category\": \"todo\",\n      \"color\": \"gray.400\",\n      \"isDefault\": true\n    },\n    {\n      \"key\": \"InProgress\",\n      \"label\": \"In progress\",\n      \"category\": \"in_progress\",\n      \"color\": \"blue.500\"\n    },\n    {\n      \"key\": \"Review\",\n      \"label\": \"Code review\",\n      \"category\": \"in_progress\",\n      \"color\": \"amber.500\"\n    },\n    {\n      \"key\": \"Done\",\n      \"label\": \"Done\",\n      \"category\": \"done\",\n      \"color\": \"green.500\"\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE workflow (revert default)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/workflow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "workflow"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Tasks",
+      "item": [
+        {
+          "name": "POST create task → saves taskId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Wire push notifications on iOS\",\n  \"description\": \"FCM credentials are ready; wire the upload flow + cleanup dead tokens.\",\n  \"type\": \"Task\",\n  \"priority\": \"Medium\",\n  \"points\": 5,\n  \"labels\": [\n    \"mobile\",\n    \"push\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('taskId', v); console.log('saved taskId', v); }",
+                  "} catch (e) { console.warn('taskId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET backlog",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/backlog",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "backlog"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET single task",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH update task fields",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"High\",\n  \"labels\": [\n    \"mobile\",\n    \"push\",\n    \"p0\"\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH status (Kanban)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"InProgress\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH assign",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "assign"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": \"{{targetUserId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH unassign",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/assign",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "assign"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigneeId\": null\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH due date",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/due-date",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "due-date"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dueDate\": \"2026-06-18T05:26:13.829Z\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET due-dates calendar",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/due-dates",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "due-dates"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST dependency (blockedBy)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/dependencies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "dependencies"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"blockerId\": \"{{blockerTaskId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET dependencies",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/dependencies",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "dependencies"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET children (Epic tree)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}/children",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}",
+                "children"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE soft",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/tasks/{{taskId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "tasks",
+                "{{taskId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Sprints",
+      "item": [
+        {
+          "name": "POST create sprint → saves sprintId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/sprints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "sprints"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sprint 24\",\n  \"goal\": \"Ship the auth lockout fix and push notif framework\",\n  \"startDate\": \"2026-06-11T05:26:13.830Z\",\n  \"endDate\": \"2026-06-25T05:26:13.830Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('sprintId', v); console.log('saved sprintId', v); }",
+                  "} catch (e) { console.warn('sprintId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET list sprints",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/sprints",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "sprints"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET single sprint",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/sprints/{{sprintId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "sprints",
+                "{{sprintId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH update sprint (name/goal/dates)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/sprints/{{sprintId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "sprints",
+                "{{sprintId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"goal\": \"Ship the auth lockout fix and push notif framework — updated\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH sprint status (Active triggers notifications)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/sprints/{{sprintId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "sprints",
+                "{{sprintId}}",
+                "status"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE sprint (soft)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/sprints/{{sprintId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "sprints",
+                "{{sprintId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET burndown",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/reports/sprints/{{sprintId}}/burndown",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "reports",
+                "sprints",
+                "{{sprintId}}",
+                "burndown"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET burnup",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/reports/sprints/{{sprintId}}/burnup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "reports",
+                "sprints",
+                "{{sprintId}}",
+                "burnup"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET cumulative flow",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/spaces/{{spaceId}}/reports/sprints/{{sprintId}}/cumulative-flow",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "spaces",
+                "{{spaceId}}",
+                "reports",
+                "sprints",
+                "{{sprintId}}",
+                "cumulative-flow"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Comments",
+      "item": [
+        {
+          "name": "POST comment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "comments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Looks good — small nit on the error message wording. cc @qa_tester\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id || j.data?.comment?._id;",
+                  "  if (v) { pm.environment.set('commentId', v); console.log('saved commentId', v); }",
+                  "} catch (e) { console.warn('commentId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "comments"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH edit",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments/{{commentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "comments",
+                "{{commentId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Looks good — small nit on the error message wording. (edited)\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/tasks/{{taskId}}/comments/{{commentId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "tasks",
+                "{{taskId}}",
+                "comments",
+                "{{commentId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Chat Rooms",
+      "item": [
+        {
+          "name": "GET /chat/rooms → saves roomId (first one)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const arr = j.data?.rooms || j.data?.items || j.data || [];",
+                  "  if (Array.isArray(arr) && arr.length) pm.environment.set('roomId', arr[0]._id);",
+                  "} catch {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET unread counts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/unread-counts",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "unread-counts"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/direct → saves directRoomId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/direct",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "direct"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"targetUserId\": \"{{targetUserId}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?.room?._id || j.data?._id;",
+                  "  if (v) { pm.environment.set('directRoomId', v); console.log('saved directRoomId', v); }",
+                  "} catch (e) { console.warn('directRoomId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /chat/rooms/group",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/group",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "group"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Standup\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"memberIds\": [\n    \"{{targetUserId}}\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?.room?._id || j.data?._id;",
+                  "  if (v) { pm.environment.set('groupRoomId', v); console.log('saved groupRoomId', v); }",
+                  "} catch (e) { console.warn('groupRoomId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /chat/rooms/channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/channel",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "channel"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"qa-engineering\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"teamId\": \"{{teamId}}\",\n  \"isPrivate\": false\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?.room?._id || j.data?._id;",
+                  "  if (v) { pm.environment.set('channelRoomId', v); console.log('saved channelRoomId', v); }",
+                  "} catch (e) { console.warn('channelRoomId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /chat/rooms/team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "team"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"teamId\": \"{{teamId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/organization",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/organization",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "organization"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /chat/rooms/:roomId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /chat/rooms/:roomId (branding)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branding\": {\n    \"color\": \"#3B82F6\",\n    \"topic\": \"Engineering sync — async-first decisions\",\n    \"tagline\": \"Ship daily\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/:roomId/join",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/join",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "join"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /chat/rooms/:roomId/leave",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "leave"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST add member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/members/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "members",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE remove member",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/members/{{targetUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "members",
+                "{{targetUserId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Messages",
+      "item": [
+        {
+          "name": "POST send → saves messageId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello team — kicking off the QA run from Postman\",\n  \"messageType\": \"text\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?.message?._id || j.data?._id;",
+                  "  if (v) { pm.environment.set('messageId', v); console.log('saved messageId', v); }",
+                  "} catch (e) { console.warn('messageId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST send with mention",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hey @qa_tester could you take a look?\",\n  \"messageType\": \"text\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST slash command /shrug",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"/shrug honestly\",\n  \"messageType\": \"text\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST slash /remind in 1m",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"/remind in 1m Review PR #248 before standup\",\n  \"messageType\": \"text\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET list",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET search ?q=",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/search",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "hello"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH edit (within 1h window)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello team — kicking off the QA run from Postman (edited)\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE for me",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}"
+              ],
+              "query": [
+                {
+                  "key": "deleteType",
+                  "value": "me"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE for everyone",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}"
+              ],
+              "query": [
+                {
+                  "key": "deleteType",
+                  "value": "everyone"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST forward",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{groupRoomId}}/messages/forward",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{groupRoomId}}",
+                "messages",
+                "forward"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sourceMessageId\": \"{{messageId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH mark seen (receipt)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/seen",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "seen"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH mark delivered",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/delivered",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "delivered"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Threads, Pins, Saves & Inbox",
+      "item": [
+        {
+          "name": "POST reply (creates thread)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Reproduced on staging — opening a ticket\",\n  \"replyTo\": \"{{messageId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET thread",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/thread",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "thread"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST pin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "pin"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET pinned",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/pinned",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "pinned"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE unpin",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/pin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "pin"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST save (bookmark)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "save"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"review with team Monday\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /me/saved-messages",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/saved-messages",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "saved-messages"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE unsave",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/save",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "save"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /me/mentions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/mentions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "mentions"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "11. Reactions",
+      "item": [
+        {
+          "name": "POST add reaction 👍",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/reactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "reactions"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reaction\": \"👍\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE my reaction",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/reactions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "{{messageId}}",
+                "reactions"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "12. Scheduled Messages & Reminders",
+      "item": [
+        {
+          "name": "POST schedule message",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/schedule",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "schedule"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Scheduled QA message\",\n  \"sendAt\": \"2026-06-11T05:28:13.830Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('scheduledId', v); console.log('saved scheduledId', v); }",
+                  "} catch (e) { console.warn('scheduledId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET my scheduled in room",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/scheduled",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "scheduled"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE cancel scheduled",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/scheduled/{{scheduledId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "messages",
+                "scheduled",
+                "{{scheduledId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /me/reminders",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "reminders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Review PR #248 before standup\",\n  \"triggerAt\": \"2026-06-11T05:31:13.830Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('reminderId', v); console.log('saved reminderId', v); }",
+                  "} catch (e) { console.warn('reminderId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /me/reminders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/reminders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "reminders"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /me/reminders/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/reminders/{{reminderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "reminders",
+                "{{reminderId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "13. Channel Tabs",
+      "item": [
+        {
+          "name": "POST create tab",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/tabs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "tabs"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Spec Docs\",\n  \"type\": \"wiki\",\n  \"config\": {},\n  \"order\": 0\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('tabId', v); console.log('saved tabId', v); }",
+                  "} catch (e) { console.warn('tabId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET list tabs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/tabs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "tabs"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH update tab",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/tabs/{{tabId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "tabs",
+                "{{tabId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Spec Docs v2\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE tab",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/tabs/{{tabId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "tabs",
+                "{{tabId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "14. Calls (REST)",
+      "item": [
+        {
+          "name": "GET history",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET active (saves callId)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/active",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "active"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  if (j.data?.call?._id) pm.environment.set('callId', j.data.call._id);",
+                  "} catch {}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET single call",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST LiveKit join token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/livekit-token",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}",
+                "livekit-token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"postman-desktop-1\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST start recording",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}",
+                "recording"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE stop recording",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}",
+                "recording"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET recording download URL",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording/download",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}",
+                "recording",
+                "download"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "15. Meetings",
+      "item": [
+        {
+          "name": "POST schedule meeting → saves meetingId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/meetings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meetings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organizationId\": \"{{organizationId}}\",\n  \"title\": \"Sprint planning\",\n  \"agenda\": \"Estimate the new tickets + assign owners\",\n  \"startTime\": \"2026-06-11T05:56:13.830Z\",\n  \"endTime\": \"2026-06-11T06:56:13.830Z\",\n  \"invitees\": [\n    {\n      \"userId\": \"{{targetUserId}}\",\n      \"isRequired\": true\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('meetingId', v); console.log('saved meetingId', v); }",
+                  "} catch (e) { console.warn('meetingId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /meetings (my upcoming)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/meetings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meetings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH RSVP",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/meetings/{{meetingId}}/rsvp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meetings",
+                "{{meetingId}}",
+                "rsvp"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE cancel meeting",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/meetings/{{meetingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "meetings",
+                "{{meetingId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "16. Notifications",
+      "item": [
+        {
+          "name": "GET inbox",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /notifications/:id/read",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/{{notificationId}}/read",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notificationId}}",
+                "read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /notifications/read-all",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/read-all",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /notifications/preferences",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "preferences"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /notifications/preferences",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/notifications/preferences",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "notifications",
+                "preferences"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"global\": {\n    \"inApp\": true,\n    \"push\": true,\n    \"email\": false\n  },\n  \"byType\": {\n    \"task_assigned\": {\n      \"push\": true,\n      \"email\": true\n    }\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "17. Push Devices",
+      "item": [
+        {
+          "name": "POST register device",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "devices"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fcm-test-device-token-from-firebase-here\",\n  \"platform\": \"ios\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET my devices",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/devices",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "devices"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE device (unregister)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/devices/{{deviceTokenId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "devices",
+                "{{deviceTokenId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "18. Work Sessions (Time Tracking)",
+      "item": [
+        {
+          "name": "POST start → saves sessionId",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "start"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgId\": \"{{organizationId}}\",\n  \"note\": \"Postman QA session\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('sessionId', v); console.log('saved sessionId', v); }",
+                  "} catch (e) { console.warn('sessionId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST activity (heartbeat — keeps user 'active')",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/activity",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "activity"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgId\": \"{{organizationId}}\",\n  \"type\": \"keystroke\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST pause",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/pause",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "pause"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgId\": \"{{organizationId}}\",\n  \"note\": \"lunch\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST resume",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/resume",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "resume"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgId\": \"{{organizationId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/stop",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "stop"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orgId\": \"{{organizationId}}\",\n  \"note\": \"EOD\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET my sessions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "19. Screenshots",
+      "item": [
+        {
+          "name": "POST upload screenshot URL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/{{sessionId}}/screenshots",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "{{sessionId}}",
+                "screenshots"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"imageUrl\": \"https://res.cloudinary.com/example/qa-screenshot.png\",\n  \"capturedAt\": \"2026-06-11T05:26:13.830Z\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('screenshotId', v); console.log('saved screenshotId', v); }",
+                  "} catch (e) { console.warn('screenshotId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET session screenshots",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/{{sessionId}}/screenshots",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "{{sessionId}}",
+                "screenshots"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE screenshot",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/screenshots/{{screenshotId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "screenshots",
+                "{{screenshotId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "20. Activity Events (Apps / Web / Input)",
+      "item": [
+        {
+          "name": "POST batch upload (keystroke + mouse + app + website)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/{{sessionId}}/activity-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "{{sessionId}}",
+                "activity-events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\n      \"type\": \"keystroke\",\n      \"bucketAt\": \"2026-06-11T05:26:13.830Z\",\n      \"payload\": {\n        \"count\": 142\n      }\n    },\n    {\n      \"type\": \"mouse\",\n      \"bucketAt\": \"2026-06-11T05:26:13.830Z\",\n      \"payload\": {\n        \"clicks\": 23,\n        \"scrolls\": 7,\n        \"distance\": 1840\n      }\n    },\n    {\n      \"type\": \"app_usage\",\n      \"bucketAt\": \"2026-06-11T05:26:13.830Z\",\n      \"startTime\": \"2026-06-11T05:11:13.830Z\",\n      \"endTime\": \"2026-06-11T05:26:13.830Z\",\n      \"payload\": {\n        \"appName\": \"VS Code\",\n        \"windowTitle\": \"REM — backend\"\n      }\n    },\n    {\n      \"type\": \"website_visit\",\n      \"bucketAt\": \"2026-06-11T05:26:13.830Z\",\n      \"startTime\": \"2026-06-11T05:21:13.830Z\",\n      \"endTime\": \"2026-06-11T05:26:13.830Z\",\n      \"payload\": {\n        \"domain\": \"github.com\",\n        \"url\": \"https://github.com/org/repo/pull/248\",\n        \"productive\": true\n      }\n    }\n  ]\n}"
+            }
+          }
+        },
+        {
+          "name": "GET my activity events",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/activity-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "activity-events"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-06-04T05:26:13.830Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-06-11T05:26:13.830Z"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET activity for another user (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/work-session/activity-events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "work-session",
+                "activity-events"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "userId",
+                  "value": "{{targetUserId}}"
+                },
+                {
+                  "key": "type",
+                  "value": "app_usage"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "21. Productivity Dashboards",
+      "item": [
+        {
+          "name": "GET /dashboards/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboards/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboards",
+                "me"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                },
+                {
+                  "key": "from",
+                  "value": "2026-06-04T05:26:13.830Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-06-11T05:26:13.830Z"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboards/org/:orgId (admin matrix)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboards/org/{{organizationId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboards",
+                "org",
+                "{{organizationId}}"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-05-12T05:26:13.830Z"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-06-11T05:26:13.830Z"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /dashboards/team/:teamId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboards/team/{{teamId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "dashboards",
+                "team",
+                "{{teamId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "22. Stars (favorites)",
+      "item": [
+        {
+          "name": "POST star task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stars",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stars"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entityType\": \"Task\",\n  \"entityId\": \"{{taskId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET my stars",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stars",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stars"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE unstar",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stars",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "stars"
+              ],
+              "query": [
+                {
+                  "key": "entityType",
+                  "value": "Task"
+                },
+                {
+                  "key": "entityId",
+                  "value": "{{taskId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "23. Outbound Webhooks (consumer side)",
+      "item": [
+        {
+          "name": "POST subscribe to events",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "webhooks"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://example.com/hooks/rem\",\n  \"events\": [\n    \"task.created\",\n    \"task.status_changed\",\n    \"chat.message.sent\"\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  const j = pm.response.json();",
+                  "  const v = j.data?._id;",
+                  "  if (v) { pm.environment.set('webhookId', v); console.log('saved webhookId', v); }",
+                  "} catch (e) { console.warn('webhookId save failed:', e.message); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/webhooks",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "webhooks"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST rotate secret",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/webhooks/{{webhookId}}/rotate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "webhooks",
+                "{{webhookId}}",
+                "rotate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE subscription",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/org/{{organizationId}}/webhooks/{{webhookId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "org",
+                "{{organizationId}}",
+                "webhooks",
+                "{{webhookId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "24. Me / Profile / Stats",
+      "item": [
+        {
+          "name": "GET /me/tasks/assigned",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/tasks/assigned",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "tasks",
+                "assigned"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /me/tasks/worked-on",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/tasks/worked-on",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "tasks",
+                "worked-on"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /me/tasks/team",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/tasks/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "tasks",
+                "team"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /me/for-you",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/me/for-you",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "me",
+                "for-you"
+              ],
+              "query": [
+                {
+                  "key": "orgId",
+                  "value": "{{organizationId}}"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

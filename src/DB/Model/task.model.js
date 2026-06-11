@@ -114,6 +114,17 @@ const taskSchema = new Schema(
     attachments: [{ type: Types.ObjectId, ref: "File" }],
 
     // =========================
+    // Dependencies (Jira-style)
+    // =========================
+    // Both directions stored explicitly. We could derive `blocks`
+    // from a reverse query on `blockedBy` but bidirectional storage
+    // makes the "what does this unblock?" lookup O(1).
+    // Kept in sync via the dependency service (atomic $addToSet /
+    // $pull on BOTH sides in a transaction-equivalent pattern).
+    blockedBy: [{ type: Types.ObjectId, ref: "Task" }],
+    blocks: [{ type: Types.ObjectId, ref: "Task" }],
+
+    // =========================
     // Soft delete
     // =========================
     isDeleted: { type: Boolean, default: false },
@@ -162,6 +173,13 @@ taskSchema.index({ organizationId: 1, sprintId: 1, isDeleted: 1 });
 
 // Search
 taskSchema.index({ title: "text", description: "text" });
+
+// Parent → children (Epic > Story > Subtask trees)
+taskSchema.index({ parentTaskId: 1, isDeleted: 1 });
+
+// Dependency lookups
+taskSchema.index({ blockedBy: 1 });
+taskSchema.index({ blocks: 1 });
 
 const taskModel = mongoose.models.Task || model("Task", taskSchema);
 export default taskModel;

@@ -60,3 +60,89 @@ export const bulkUpdateDueDates = joi
       .required(),
   })
   .required();
+
+// ── Task params (for routes that only need params) ───────────
+export const taskParams = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+  })
+  .required();
+
+// ── PATCH /tasks/:taskId  (general update) ───────────────────
+// status + assigneeId are intentionally NOT here — they have dedicated
+// endpoints so the access rules can be enforced per operation.
+export const updateTask = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+
+    title: joi.string().min(2).max(200).trim(),
+    description: joi.string().allow("").max(5000),
+    type: joi.string().valid(...Object.values(taskTypes)),
+    priority: joi.string().valid(...Object.values(taskPriority)),
+    labels: joi.array().items(joi.string().trim().max(30)).max(20),
+    startDate: joi.date().iso().allow(null),
+    parentTaskId: generalFields.id.allow(null),
+    points: joi.number().integer().min(0).max(100),
+    sprintId: generalFields.id.allow(null),
+  })
+  .or(
+    "title",
+    "description",
+    "type",
+    "priority",
+    "labels",
+    "startDate",
+    "parentTaskId",
+    "points",
+    "sprintId",
+  )
+  .required();
+
+// ── PATCH /tasks/:taskId/status ──────────────────────────────
+export const changeTaskStatus = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+    status: joi
+      .string()
+      .valid(...Object.values(taskStatus))
+      .required(),
+  })
+  .required();
+
+// ── PATCH /tasks/:taskId/assign ──────────────────────────────
+// null clears the assignee.
+export const assignTask = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+    assigneeId: generalFields.id.allow(null).required(),
+  })
+  .required();
+
+// ── Dependencies ─────────────────────────────────────────────
+// POST /tasks/:taskId/dependencies   body: { blockerId }
+export const addDependency = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+    blockerId: generalFields.id.required(),
+  })
+  .required();
+
+// DELETE /tasks/:taskId/dependencies/:blockerId
+export const removeDependency = joi
+  .object({
+    orgId: generalFields.id.required(),
+    spaceId: generalFields.id.required(),
+    taskId: generalFields.id.required(),
+    blockerId: generalFields.id.required(),
+  })
+  .required();

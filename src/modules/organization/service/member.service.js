@@ -3,6 +3,10 @@ import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
+import { syncOrgChatOnMemberChange } from "../../chatroom/service/chat.sync.service.js";
+import { httpError } from "../../../utils/errors/index.js";
+import { recordAudit } from "../../../utils/audit/audit.logger.js";
+import { auditActions } from "../../../utils/audit/audit.actions.js";
 
 // ─────────────────────────────────────────────────────────────
 // GET /org/:orgId/members
@@ -19,7 +23,7 @@ export const getOrgMembers = asyncHandler(async (req, res, next) => {
     filter: { organizationId: orgId, userId: req.user._id, isActive: true },
   });
   if (!requester)
-    return next(new Error("Not a member of this organization", { cause: 403 }));
+    return next(httpError(403, "Not a member of this organization"));
 
   const filter = { organizationId: orgId, isActive: true };
   if (role) filter.role = role;
@@ -68,7 +72,7 @@ export const changeMemberRole = asyncHandler(async (req, res, next) => {
 
   // 1. Self check first
   if (memberId === req.user._id.toString()) {
-    return next(new Error("Cannot change your own role", { cause: 400 }));
+    return next(httpError(400, "Cannot change your own role"));
   }
 
   // 2. Check requester is in the org
@@ -78,16 +82,14 @@ export const changeMemberRole = asyncHandler(async (req, res, next) => {
   });
   if (!requester) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
   // 3. Only owner can change roles
   if (requester.role !== "owner") {
     return next(
-      new Error("Only the organization owner can change member roles", {
-        cause: 403,
-      }),
+      httpError(403, "Only the organization owner can change member roles"),
     );
   }
 
@@ -98,13 +100,13 @@ export const changeMemberRole = asyncHandler(async (req, res, next) => {
   });
   if (!membership) {
     return next(
-      new Error("Member not found in this organization", { cause: 404 }),
+      httpError(404, "Member not found in this organization"),
     );
   }
 
   // 5. Can't change the owner's role
   if (membership.role === "owner") {
-    return next(new Error("Cannot change the owner role", { cause: 403 }));
+    return next(httpError(403, "Cannot change the owner role"));
   }
 
   const updated = await dbService.findOneAndUpdate({
@@ -113,6 +115,24 @@ export const changeMemberRole = asyncHandler(async (req, res, next) => {
     data: { role },
     options: { new: true },
     populate: [{ path: "userId", select: "username email image" }],
+  });
+
+  // Reflect the role change in the org-wide chat: admins promoted in
+  // the org become admins of the room, demoted ones lose those rights.
+  if (["owner", "admin"].includes(role)) {
+    syncOrgChatOnMemberChange(orgId, { promoteUserId: memberId });
+  } else {
+    syncOrgChatOnMemberChange(orgId, { demoteUserId: memberId });
+  }
+
+  await recordAudit({
+    req,
+    actorId: req.user._id,
+    orgId,
+    action: auditActions.ORG_MEMBER_ROLE_CHANGE,
+    targetType: "User",
+    targetId: memberId,
+    meta: { previousRole: membership.role, newRole: role },
   });
 
   return successResponse({
@@ -133,10 +153,7 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   // 1. Self check first — before any role check
   if (memberId === req.user._id.toString()) {
     return next(
-      new Error(
-        "Cannot remove yourself. Use DELETE /org/:orgId/leave instead.",
-        { cause: 400 },
-      ),
+      httpError(400, "Cannot remove yourself. Use DELETE /org/:orgId/leave instead."),
     );
   }
 
@@ -147,14 +164,14 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   });
   if (!requester) {
     return next(
-      new Error("You are not a member of this organization", { cause: 403 }),
+      httpError(403, "You are not a member of this organization"),
     );
   }
 
   // 3. Check requester has permission
   if (!["owner", "admin"].includes(requester.role)) {
     return next(
-      new Error("Only owner or admin can remove members", { cause: 403 }),
+      httpError(403, "Only owner or admin can remove members"),
     );
   }
 
@@ -165,14 +182,14 @@ export const removeMember = asyncHandler(async (req, res, next) => {
   });
   if (!membership) {
     return next(
-      new Error("Member not found in this organization", { cause: 404 }),
+      httpError(404, "Member not found in this organization"),
     );
   }
 
   // 5. Can't remove the owner
   if (membership.role === "owner") {
     return next(
-      new Error("Cannot remove the organization owner", { cause: 403 }),
+      httpError(403, "Cannot remove the organization owner"),
     );
   }
 
@@ -181,6 +198,19 @@ export const removeMember = asyncHandler(async (req, res, next) => {
     model: memberModel,
     filter: { organizationId: orgId, userId: memberId },
     data: { isActive: false },
+  });
+
+  // Drop them from the org-wide chat (and kick their sockets out of it).
+  syncOrgChatOnMemberChange(orgId, { removeUserId: memberId });
+
+  await recordAudit({
+    req,
+    actorId: req.user._id,
+    orgId,
+    action: auditActions.ORG_MEMBER_REMOVE,
+    targetType: "User",
+    targetId: memberId,
+    meta: { previousRole: membership.role },
   });
 
   return successResponse({ res, message: "Member removed from organization" });
@@ -202,16 +232,13 @@ export const leaveOrganization = asyncHandler(async (req, res, next) => {
 
   if (!membership) {
     return next(
-      new Error("You are not a member of this organization", { cause: 404 }),
+      httpError(404, "You are not a member of this organization"),
     );
   }
 
   if (membership.role === "owner") {
     return next(
-      new Error(
-        "Owner cannot leave. Transfer ownership or delete the organization.",
-        { cause: 400 },
-      ),
+      httpError(400, "Owner cannot leave. Transfer ownership or delete the organization."),
     );
   }
 
@@ -219,6 +246,17 @@ export const leaveOrganization = asyncHandler(async (req, res, next) => {
     model: memberModel,
     filter: { organizationId: orgId, userId },
     data: { isActive: false },
+  });
+
+  // Drop the leaving user from the org-wide chat as well.
+  syncOrgChatOnMemberChange(orgId, { removeUserId: userId });
+
+  await recordAudit({
+    req,
+    actorId: userId,
+    orgId,
+    action: auditActions.ORG_MEMBER_LEAVE,
+    meta: { previousRole: membership.role },
   });
 
   return successResponse({ res, message: "You have left the organization" });

@@ -25,6 +25,17 @@ import {
 import refreshTokenModel from "../../../DB/Model/refreshToken.model.js";
 import ms from "ms"; // npm install ms
 import { config } from "../../../config/index.js";
+import { recordAudit } from "../../../utils/audit/audit.logger.js";
+import { auditActions } from "../../../utils/audit/audit.actions.js";
+import { httpError } from "../../../utils/errors/index.js";
+
+// ─── Brute-force lockout constants ──────────────────────────
+// 5 failed attempts → 15-minute lockout. These match common SaaS
+// defaults (Google, GitHub). Tune via env if needed.
+const LOGIN_MAX_ATTEMPTS = Number(process.env.LOGIN_MAX_ATTEMPTS || 5);
+const LOGIN_LOCKOUT_MS = Number(
+  process.env.LOGIN_LOCKOUT_MS || 15 * 60 * 1000,
+);
 
 const hashToken = (token) =>
   crypto.createHash("sha256").update(token).digest("hex");
@@ -94,9 +105,7 @@ const checkBanAndOTPStatus = async (user, otpType) => {
   const { otpField, banUntilField, failedAttemptsField, expiresField } = fields;
 
   if (user[banUntilField] && user[banUntilField] > Date.now()) {
-    throw new Error("Your request has been banned. Try again later", {
-      cause: 429,
-    });
+    throw httpError(429, "Your request has been banned. Try again later");
   }
 
   if (user[banUntilField] && user[banUntilField] < Date.now()) {
@@ -108,9 +117,7 @@ const checkBanAndOTPStatus = async (user, otpType) => {
   if (user[failedAttemptsField] >= 5) {
     user[banUntilField] = Date.now() + 300000;
     await user.save();
-    throw new Error("Too many failed attempts. You are banned for 5 minutes.", {
-      cause: 429,
-    });
+    throw httpError(429, "Too many failed attempts. You are banned for 5 minutes.");
   }
 
   if (user[otpField] && user[expiresField] < Date.now()) {
@@ -121,9 +128,7 @@ const checkBanAndOTPStatus = async (user, otpType) => {
           ? "ForgetPassword"
           : "sendConfirmationEmail";
     emailEvent.emit(eventName, { id: user._id, email: user.email });
-    throw new Error("OTP expired. A new OTP has been sent to your email.", {
-      cause: 401,
-    });
+    throw httpError(401, "OTP expired. A new OTP has been sent to your email.");
   }
 };
 
@@ -134,7 +139,7 @@ const checkBanAndOTPStatus = async (user, otpType) => {
 export const login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    return next(new Error("Email and password are required", { cause: 400 }));
+    return next(httpError(400, "Email and password are required"));
   }
 
   const user = await userModel.findOne({
@@ -143,37 +148,107 @@ export const login = asyncHandler(async (req, res, next) => {
   });
 
   if (!user) {
+    // Audit the failure but don't leak which path failed (user vs
+    // password) to the response — return generic 401.
+    await recordAudit({
+      req,
+      action: auditActions.AUTH_LOGIN_FAILURE,
+      outcome: "failure",
+      meta: { email, reason: "user_not_found" },
+    });
+
     const existingUser = await userModel.findOne({ email });
     if (existingUser && existingUser.provider === providerTypes.Google) {
       return next(
-        new Error("Account registered with another provider (e.g., Google).", {
-          cause: 401,
-        }),
+        httpError(401, "Account registered with another provider (e.g., Google)."),
       );
     }
-    return next(new Error("Invalid credentials", { cause: 401 }));
+    return next(httpError(401, "Invalid credentials"));
   }
 
   if (!user.confirmEmail) {
-    return next(new Error("Email not confirmed", { cause: 401 }));
+    return next(httpError(401, "Email not confirmed"));
+  }
+
+  // ── Brute-force lockout check (BEFORE bcrypt compare) ──────
+  // The check goes first so we don't waste CPU on bcrypt for a
+  // locked-out account, and so the response time doesn't leak
+  // "did the password match" info during the lockout window.
+  if (user.loginLockedUntil && user.loginLockedUntil.getTime() > Date.now()) {
+    const retryAfterSec = Math.ceil(
+      (user.loginLockedUntil.getTime() - Date.now()) / 1000,
+    );
+    res.setHeader("Retry-After", retryAfterSec);
+    return next(
+      httpError(
+        429,
+        `Account temporarily locked due to repeated failed attempts. Try again in ${retryAfterSec} seconds.`,
+      ),
+    );
   }
 
   if (!compareHash({ plainText: password, hashValue: user.password })) {
-    return next(new Error("Invalid credentials", { cause: 401 }));
+    // Track the failure. If we've crossed the threshold, lock the
+    // account and audit it as a distinct event so dashboards can
+    // distinguish "many bad attempts" from a one-off typo.
+    const nextCount = (user.loginFailedAttempts || 0) + 1;
+    const update = { loginFailedAttempts: nextCount };
+    let locked = false;
+
+    if (nextCount >= LOGIN_MAX_ATTEMPTS) {
+      update.loginLockedUntil = new Date(Date.now() + LOGIN_LOCKOUT_MS);
+      locked = true;
+    }
+    await userModel.updateOne({ _id: user._id }, { $set: update });
+
+    await recordAudit({
+      req,
+      actorId: user._id,
+      action: auditActions.AUTH_LOGIN_FAILURE,
+      outcome: "failure",
+      meta: {
+        email,
+        reason: "bad_password",
+        attempts: nextCount,
+        locked,
+      },
+    });
+
+    return next(httpError(401, "Invalid credentials"));
   }
 
   if (user.twoStepVerification) {
     emailEvent.emit("twoStepVerification", { id: user._id, email });
     return successResponse({ res, data: { requiresOTP: true } });
   }
-const tokens = await issueTokens(user, req);
-return successResponse({
-  res,
-  data: {
-    ...tokens,
-    user: buildUserPayload(user),
-  },
-});
+
+  // ── Successful password match ──────────────────────────────
+  // Reset the brute-force counter so a clean login clears any
+  // previous failures.
+  if (user.loginFailedAttempts > 0 || user.loginLockedUntil) {
+    await userModel.updateOne(
+      { _id: user._id },
+      { $set: { loginFailedAttempts: 0, loginLockedUntil: null } },
+    );
+  }
+
+  const tokens = await issueTokens(user, req);
+
+  await recordAudit({
+    req,
+    actorId: user._id,
+    action: auditActions.AUTH_LOGIN_SUCCESS,
+    outcome: "success",
+    meta: { email, provider: "system" },
+  });
+
+  return successResponse({
+    res,
+    data: {
+      ...tokens,
+      user: buildUserPayload(user),
+    },
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -183,7 +258,7 @@ return successResponse({
 export const loginWithGoogle = asyncHandler(async (req, res, next) => {
   const { idToken } = req.body;
   if (!idToken) {
-    return next(new Error("ID token is required", { cause: 400 }));
+    return next(httpError(400, "ID token is required"));
   }
 
   const client = new OAuth2Client();
@@ -194,24 +269,20 @@ export const loginWithGoogle = asyncHandler(async (req, res, next) => {
   const payload = ticket.getPayload();
 
   if (!payload.email_verified) {
-    return next(new Error("Google email not verified", { cause: 401 }));
+    return next(httpError(401, "Google email not verified"));
   }
 
   const user = await userModel.findOne({ email: payload.email });
 
   if (!user) {
     return next(
-      new Error("User not found. Please sign up with Google first.", {
-        cause: 404,
-      }),
+      httpError(404, "User not found. Please sign up with Google first."),
     );
   }
 
   if (user.provider !== providerTypes.Google) {
     return next(
-      new Error("This email is registered with another provider.", {
-        cause: 409,
-      }),
+      httpError(409, "This email is registered with another provider."),
     );
   }
 const tokens = await issueTokens(user, req);
@@ -231,15 +302,15 @@ return successResponse({
 export const validateLoginOTP = asyncHandler(async (req, res, next) => {
   const { email, code } = req.body;
   if (!email || !code) {
-    return next(new Error("Email and OTP code are required", { cause: 400 }));
+    return next(httpError(400, "Email and OTP code are required"));
   }
 
   const user = await userModel.findOne({ email, isDeleted: false });
-  if (!user) return next(new Error("User not found", { cause: 404 }));
+  if (!user) return next(httpError(404, "User not found"));
 
   if (!user.twoStepVerification) {
     return next(
-      new Error("Two-step verification is not enabled", { cause: 400 }),
+      httpError(400, "Two-step verification is not enabled"),
     );
   }
 
@@ -263,16 +334,14 @@ export const validateLoginOTP = asyncHandler(async (req, res, next) => {
       user.twoStepVerificationOTPBanUntil = Date.now() + 300000;
       await user.save();
       return next(
-        new Error("Too many failed attempts. You are banned for 5 minutes.", {
-          cause: 429,
-        }),
+        httpError(429, "Too many failed attempts. You are banned for 5 minutes."),
       );
     }
-    return next(new Error("Invalid OTP", { cause: 401 }));
+    return next(httpError(401, "Invalid OTP"));
   }
 
   if (user.twoStepVerificationOTPExpires < Date.now()) {
-    return next(new Error("OTP expired", { cause: 401 }));
+    return next(httpError(401, "OTP expired"));
   }
 
   await userModel.updateOne(
@@ -302,15 +371,15 @@ export const verifyEnableTwoStepVerification = asyncHandler(
   async (req, res, next) => {
     const { email, code } = req.body;
     if (!email || !code) {
-      return next(new Error("Email and code are required", { cause: 400 }));
+      return next(httpError(400, "Email and code are required"));
     }
 
     const user = await userModel.findOne({ email, isDeleted: false });
-    if (!user) return next(new Error("User not found", { cause: 404 }));
+    if (!user) return next(httpError(404, "User not found"));
 
     if (user.twoStepVerificationOTPValidated) {
       return next(
-        new Error("Two step verification already enabled", { cause: 409 }),
+        httpError(409, "Two step verification already enabled"),
       );
     }
 
@@ -332,18 +401,16 @@ export const verifyEnableTwoStepVerification = asyncHandler(
           email: user.email,
         });
         return next(
-          new Error("Incorrect OTP. A new OTP has been sent to your email.", {
-            cause: 401,
-          }),
+          httpError(401, "Incorrect OTP. A new OTP has been sent to your email."),
         );
       }
       return next(
-        new Error("Incorrect OTP. Too many failed attempts.", { cause: 429 }),
+        httpError(429, "Incorrect OTP. Too many failed attempts."),
       );
     }
 
     if (user.twoStepVerificationOTPExpires < Date.now()) {
-      return next(new Error("OTP expired", { cause: 401 }));
+      return next(httpError(401, "OTP expired"));
     }
 
     await userModel.updateOne(
@@ -372,17 +439,15 @@ export const verifyEnableTwoStepVerification = asyncHandler(
 export const forgetPassword = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
   if (!email) {
-    return next(new Error("Email is required", { cause: 400 }));
+    return next(httpError(400, "Email is required"));
   }
 
   const user = await userModel.findOne({ email, isDeleted: false });
-  if (!user) return next(new Error("User not found", { cause: 404 }));
+  if (!user) return next(httpError(404, "User not found"));
 
   if (!user.confirmEmail) {
     return next(
-      new Error("Email not confirmed. Please verify your account", {
-        cause: 404,
-      }),
+      httpError(404, "Email not confirmed. Please verify your account"),
     );
   }
 
@@ -390,7 +455,7 @@ export const forgetPassword = asyncHandler(async (req, res, next) => {
 
   if (user.resetPasswordOTP && user.resetPasswordOTPExpires > Date.now()) {
     return next(
-      new Error("An OTP has already been sent to your email.", { cause: 429 }),
+      httpError(429, "An OTP has already been sent to your email."),
     );
   }
 
@@ -409,17 +474,15 @@ export const forgetPassword = asyncHandler(async (req, res, next) => {
 export const validateForgetPassword = asyncHandler(async (req, res, next) => {
   const { email, code } = req.body;
   if (!email || !code) {
-    return next(new Error("Email and OTP code are required", { cause: 400 }));
+    return next(httpError(400, "Email and OTP code are required"));
   }
 
   const user = await userModel.findOne({ email, isDeleted: false });
-  if (!user) return next(new Error("User not found", { cause: 404 }));
+  if (!user) return next(httpError(404, "User not found"));
 
   if (!user.confirmEmail) {
     return next(
-      new Error("Email not confirmed. Please verify your account", {
-        cause: 404,
-      }),
+      httpError(404, "Email not confirmed. Please verify your account"),
     );
   }
 
@@ -435,13 +498,11 @@ export const validateForgetPassword = asyncHandler(async (req, res, next) => {
     if (user.resetPasswordOTPFailedAttempts < 5) {
       emailEvent.emit("ForgetPassword", { id: user._id, email: user.email });
       return next(
-        new Error("Incorrect OTP. A new OTP has been sent to your email.", {
-          cause: 401,
-        }),
+        httpError(401, "Incorrect OTP. A new OTP has been sent to your email."),
       );
     }
     return next(
-      new Error("Incorrect OTP. Too many failed attempts.", { cause: 429 }),
+      httpError(429, "Incorrect OTP. Too many failed attempts."),
     );
   }
 
@@ -457,17 +518,15 @@ export const validateForgetPassword = asyncHandler(async (req, res, next) => {
 export const resetPassword = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
   if (!email || !password) {
-    return next(new Error("Email and password are required", { cause: 400 }));
+    return next(httpError(400, "Email and password are required"));
   }
 
   const user = await userModel.findOne({ email, isDeleted: false });
-  if (!user) return next(new Error("User not found", { cause: 404 }));
+  if (!user) return next(httpError(404, "User not found"));
 
   if (!user.confirmEmail) {
     return next(
-      new Error("Email not confirmed. Please verify your account", {
-        cause: 404,
-      }),
+      httpError(404, "Email not confirmed. Please verify your account"),
     );
   }
 
@@ -475,9 +534,7 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
 
   if (!user.resetPasswordOTPValidated) {
     return next(
-      new Error("OTP not validated. Please validate the OTP first.", {
-        cause: 401,
-      }),
+      httpError(401, "OTP not validated. Please validate the OTP first."),
     );
   }
 
@@ -486,6 +543,10 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
     {
       password: generateHash({ plainText: password }),
       changeCredentialsTime: Date.now(),
+      // Reset brute-force counters too — successful credential change
+      // restores access.
+      loginFailedAttempts: 0,
+      loginLockedUntil: null,
       $unset: {
         resetPasswordOTP: 1,
         resetPasswordOTPExpires: 1,
@@ -495,6 +556,13 @@ export const resetPassword = asyncHandler(async (req, res, next) => {
       },
     },
   );
+
+  await recordAudit({
+    req,
+    actorId: user._id,
+    action: auditActions.AUTH_PASSWORD_RESET_COMPLETE,
+    meta: { email },
+  });
 
   return successResponse({ res, message: "Password reset successful" });
 });

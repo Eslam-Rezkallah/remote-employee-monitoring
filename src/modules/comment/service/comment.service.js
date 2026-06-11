@@ -5,6 +5,7 @@ import commentModel from "../../../DB/Model/comment.model.js";
 import taskModel from "../../../DB/Model/task.model.js";
 import { roleTypes } from "../../../DB/Model/user.model.js";
 import { notificationEvent } from "../../../utils/events/notification.event.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // ── Shared populate config ────────────────────────────────────
 const commentPopulate = [
@@ -29,7 +30,7 @@ export const createComment = asyncHandler(async (req, res, next) => {
   });
 
   if (!task) {
-    return next(new Error("Task not found", { cause: 404 }));
+    return next(httpError(404, "Task not found"));
   }
 
   // If reply — verify parent exists and belongs to same task
@@ -41,10 +42,7 @@ export const createComment = asyncHandler(async (req, res, next) => {
 
     if (!parent) {
       return next(
-        new Error(
-          "Parent comment not found or does not belong to this task",
-          { cause: 404 },
-        ),
+        httpError(404, "Parent comment not found or does not belong to this task"),
       );
     }
 
@@ -130,7 +128,7 @@ export const getTaskComments = asyncHandler(async (req, res, next) => {
   });
 
   if (!task) {
-    return next(new Error("Task not found", { cause: 404 }));
+    return next(httpError(404, "Task not found"));
   }
 
 
@@ -203,12 +201,12 @@ export const updateComment = asyncHandler(async (req, res, next) => {
   });
 
   if (!comment) {
-    return next(new Error("Comment not found", { cause: 404 }));
+    return next(httpError(404, "Comment not found"));
   }
 
   if (comment.createdBy.toString() !== req.user._id.toString()) {
     return next(
-      new Error("Only the author can edit this comment", { cause: 403 }),
+      httpError(403, "Only the author can edit this comment"),
     );
   }
 
@@ -237,7 +235,7 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
   });
 
   if (!comment) {
-    return next(new Error("Comment not found", { cause: 404 }));
+    return next(httpError(404, "Comment not found"));
   }
 
   const isAuthor = comment.createdBy.toString() === req.user._id.toString();
@@ -245,7 +243,7 @@ export const deleteComment = asyncHandler(async (req, res, next) => {
 
   if (!isAuthor && !isAdmin) {
     return next(
-      new Error("Not authorized to delete this comment", { cause: 403 }),
+      httpError(403, "Not authorized to delete this comment"),
     );
   }
 

@@ -1,6 +1,6 @@
 import { AppError } from "./AppError.js";
 export class ForbiddenError extends AppError {
-  constructor(message = "Forbidden") {
-    super(message, 403);
+  constructor(message = "Forbidden", details = null) {
+    super(message, 403, details);
   }
 }

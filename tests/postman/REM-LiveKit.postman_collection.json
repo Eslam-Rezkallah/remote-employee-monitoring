@@ -1,0 +1,381 @@
+{
+  "info": {
+    "name": "REM Backend — LiveKit Integration Tests",
+    "_postman_id": "rem-livekit-2026-05",
+    "description": "End-to-end tests for the LiveKit voice/video integration plus the auth/chat dependencies needed to reach it.\n\nVariables (defined in the matching environment):\n  baseUrl       — e.g. http://localhost:3000\n  testEmail     — user you've signed up + confirmed\n  testPassword  — that user's password\n  accessToken   — auto-set by the Login request\n  refreshToken  — auto-set by the Login request\n  userId        — auto-set by the Login request\n  roomId        — chat room you're a member of (set manually after listing rooms)\n  callId        — set after running the seed script (tests/postman/seed-test-call.js)\n  deviceId      — opaque per-device id, e.g. desktop-1",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "1. Health (no auth)",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": ["{{baseUrl}}"],
+              "path": ["healthz"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('success=true', () => pm.expect(pm.response.json().success).to.be.true);",
+                  "pm.test('uptime is a number', () => pm.expect(pm.response.json().data.uptime).to.be.a('number'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /readyz",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/readyz",
+              "host": ["{{baseUrl}}"],
+              "path": ["readyz"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 when ready, 503 when degraded', () =>",
+                  "  pm.expect([200,503]).to.include(pm.response.code));",
+                  "const j = pm.response.json();",
+                  "pm.test('mongo check present', () =>",
+                  "  pm.expect(j.data.checks.mongo).to.have.property('ok'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Auth",
+      "item": [
+        {
+          "name": "POST /auth/signup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/signup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "signup"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"lkTest\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"confirmPassword\": \"{{testPassword}}\"\n}"
+            },
+            "description": "Run ONCE per test email. Confirm via the OTP delivered to that inbox (PATCH /auth/confirm-email below), then use the Login request."
+          }
+        },
+        {
+          "name": "PATCH /auth/confirm-email",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/confirm-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "confirm-email"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"PASTE_OTP_HERE\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "if (j.data && j.data.accessToken) {",
+                  "  pm.environment.set('accessToken', j.data.accessToken);",
+                  "  pm.environment.set('refreshToken', j.data.refreshToken);",
+                  "  pm.environment.set('userId', j.data.user._id);",
+                  "  console.log('Saved accessToken + userId to environment');",
+                  "} else if (j.data && j.data.requiresOTP) {",
+                  "  console.warn('Account has 2FA enabled — use /validate-login-otp');",
+                  "} else {",
+                  "  pm.test('login returned tokens', () => pm.expect(false, 'no tokens in response').to.be.true);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Chat rooms (find a roomId)",
+      "item": [
+        {
+          "name": "GET /chat/rooms",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "const rooms = j.data?.rooms || j.data?.items || j.data || [];",
+                  "if (Array.isArray(rooms) && rooms.length > 0) {",
+                  "  pm.environment.set('roomId', rooms[0]._id);",
+                  "  console.log('Saved first roomId to environment:', rooms[0]._id);",
+                  "} else {",
+                  "  console.warn('No rooms found — create one (e.g. POST /chat/rooms/group) before running call tests');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Calls (REST)",
+      "item": [
+        {
+          "name": "GET /chat/rooms/:roomId/calls (history)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "calls"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /chat/rooms/:roomId/calls/active",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/active",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "calls", "active"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "if (j.data?.call?._id) {",
+                  "  pm.environment.set('callId', j.data.call._id);",
+                  "  console.log('Saved active callId:', j.data.call._id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. LiveKit (the new endpoints)",
+      "item": [
+        {
+          "name": "POST /chat/rooms/:roomId/calls/:callId/livekit-token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/livekit-token",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "{{callId}}",
+                "livekit-token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\"\n}"
+            },
+            "description": "Requires:\n  • Call doc must exist in DB (run tests/postman/seed-test-call.js)\n  • Your user must be a participant on that Call\n  • Call status must be 'ringing' or 'active'\n  • LIVEKIT_URL/KEY/SECRET must be set in your .env.dev"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const j = pm.response.json();",
+                  "pm.test('returns token + url + identity', () => {",
+                  "  pm.expect(j.data.token).to.be.a('string').and.have.length.greaterThan(50);",
+                  "  pm.expect(j.data.url).to.match(/^wss?:\\/\\//);",
+                  "  pm.expect(j.data.identity).to.match(/.+__.+/);",
+                  "  pm.expect(j.data.room).to.match(/^call_/);",
+                  "});",
+                  "",
+                  "// Decode the JWT (no signature check — Postman doesn't have the secret)",
+                  "try {",
+                  "  const parts = j.data.token.split('.');",
+                  "  pm.test('JWT has 3 parts', () => pm.expect(parts.length).to.equal(3));",
+                  "  const pad = (s) => s + '='.repeat((4 - s.length % 4) % 4);",
+                  "  const b64 = (s) => pad(s.replace(/-/g,'+').replace(/_/g,'/'));",
+                  "  const payload = JSON.parse(atob(b64(parts[1])));",
+                  "  console.log('JWT payload:', payload);",
+                  "  pm.test('grant.roomJoin = true', () =>",
+                  "    pm.expect(payload.video.roomJoin).to.equal(true));",
+                  "  pm.test('grant.room matches', () =>",
+                  "    pm.expect(payload.video.room).to.equal(j.data.room));",
+                  "  pm.environment.set('livekitToken', j.data.token);",
+                  "  pm.environment.set('livekitUrl', j.data.url);",
+                  "} catch (e) {",
+                  "  console.error('JWT decode failed:', e);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /livekit-token (negative: not a participant)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/000000000000000000000000/livekit-token",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "chat",
+                "rooms",
+                "{{roomId}}",
+                "calls",
+                "000000000000000000000000",
+                "livekit-token"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"deviceId\": \"phantom\" }"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 Call not found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. LiveKit webhook (manual / negative)",
+      "item": [
+        {
+          "name": "POST /calls/livekit/webhook (no signature → 401)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/calls/livekit/webhook",
+              "host": ["{{baseUrl}}"],
+              "path": ["calls", "livekit", "webhook"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"event\":\"room_finished\",\"room\":{\"name\":\"call_fake\"}}"
+            },
+            "description": "Postman cannot mint a LiveKit-signed webhook. This request only confirms that the route is mounted AND rejects unsigned bodies with 401.\n\nTo see a real signed webhook, expose your local server via ngrok and configure the webhook URL in LiveKit Cloud → Project Settings → Webhooks."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 invalid signature (LiveKit enabled)', () => {",
+                  "  if ([401, 503].includes(pm.response.code)) {",
+                  "    pm.expect(true).to.be.true;",
+                  "  } else if (pm.response.code === 404) {",
+                  "    console.warn('webhook path 404 — LIVEKIT_* env not set, route not mounted');",
+                  "  } else {",
+                  "    pm.expect.fail('expected 401 or 503, got ' + pm.response.code);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

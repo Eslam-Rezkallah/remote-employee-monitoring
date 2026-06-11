@@ -1,23 +1,23 @@
 import Task from "../../../DB/Model/task.model.js";
 import userModel from "../../../DB/Model/user.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { annotateWorkedOnWithAI, rerankForYouWithPythonAI } from "../../../../ai-services/me.ai.service.js";
+import { requireOrgMember as _requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // OPTIONAL: if you have these models, you can uncomment and use them
 // import Comment from "../../../DB/Model/comment.model.js";
 // import WorkSession from "../../../DB/Model/worksession.model.js";
 
+// Optional-orgId wrapper: this module exposes endpoints (e.g. assignedTasks)
+// where orgId is optional in the query. The central requireOrgMember always
+// requires both args — wrap it to preserve the existing "no-orgId = skip"
+// behavior so callers don't need to add their own conditionals.
 async function requireOrgMember(orgId, userId) {
-  if (!orgId) return; // orgId optional in assignedTasks
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
+  if (!orgId) return;
+  return _requireOrgMember(orgId, userId);
 }
 
 function toBoolean(value, defaultValue = true) {
@@ -202,7 +202,7 @@ export const teamTasks = asyncHandler(async (req, res, next) => {
 
   const myTeamIds = (req.user.teams || []).map((id) => id.toString());
   if (teamId && !myTeamIds.includes(String(teamId))) {
-    throw new Error("You are not part of this team", { cause: 403 });
+    throw httpError(403, "You are not part of this team");
   }
 
   const selectedTeamIds = teamId ? [String(teamId)] : myTeamIds;

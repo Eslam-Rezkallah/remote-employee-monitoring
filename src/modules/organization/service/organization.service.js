@@ -7,6 +7,9 @@ import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 import { getPagination } from "../../../utils/db/pagination.js";
+import { recordAudit } from "../../../utils/audit/audit.logger.js";
+import { auditActions } from "../../../utils/audit/audit.actions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 // ─────────────────────────────────────────────────────────────
 // PRIVATE HELPERS
@@ -48,11 +51,9 @@ export async function requireOrgRole({ orgId, userId, roles }) {
     filter: { organizationId: orgId, userId, isActive: true },
   });
   if (!member)
-    throw new Error("You are not a member of this organization", {
-      cause: 403,
-    });
+    throw httpError(403, "You are not a member of this organization");
   if (!roles.includes(member.role))
-    throw new Error("Not authorized", { cause: 403 });
+    throw httpError(403, "Not authorized");
   return member;
 }
 
@@ -94,13 +95,13 @@ export const getOrg = asyncHandler(async (req, res, next) => {
     filter: { organizationId: orgId, userId: req.user._id, isActive: true },
   });
   if (!member)
-    return next(new Error("Not a member of this organization", { cause: 403 }));
+    return next(httpError(403, "Not a member of this organization"));
 
   const org = await dbService.findOne({
     model: organizationModel,
     filter: { _id: orgId, isDeleted: false },
   });
-  if (!org) return next(new Error("Organization not found", { cause: 404 }));
+  if (!org) return next(httpError(404, "Organization not found"));
 
   const memberCount = await dbService.countDocuments({
     model: memberModel,
@@ -137,7 +138,7 @@ export const createOrg = asyncHandler(async (req, res, next) => {
     filter: { name, isDeleted: false },
   });
   if (existingName) {
-    return next(new Error("Organization name already exists", { cause: 409 }));
+    return next(httpError(409, "Organization name already exists"));
   }
 
   // ── Check duplicate slug ────────────────────────────────
@@ -148,10 +149,7 @@ export const createOrg = asyncHandler(async (req, res, next) => {
   });
   if (existingSlug) {
     return next(
-      new Error(
-        "Organization slug already taken. Choose a different name or slug.",
-        { cause: 409 },
-      ),
+      httpError(409, "Organization slug already taken. Choose a different name or slug."),
     );
   }
 
@@ -184,6 +182,16 @@ export const createOrg = asyncHandler(async (req, res, next) => {
     },
   });
 
+  await recordAudit({
+    req,
+    actorId: req.user._id,
+    orgId: org._id,
+    action: auditActions.ORG_CREATE,
+    targetType: "Organization",
+    targetId: org._id,
+    meta: { name: org.name, slug: org.slug },
+  });
+
   return successResponse(
     { res, message: "Organization created", data: org },
     201,
@@ -209,7 +217,7 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
     model: organizationModel,
     filter: { _id: orgId, isDeleted: false },
   });
-  if (!org) return next(new Error("Organization not found", { cause: 404 }));
+  if (!org) return next(httpError(404, "Organization not found"));
 
   const update = {};
 
@@ -221,7 +229,7 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
     });
     if (existingName) {
       return next(
-        new Error("Organization name already exists", { cause: 409 }),
+        httpError(409, "Organization name already exists"),
       );
     }
     update.name = name;
@@ -243,13 +251,13 @@ export const updateOrg = asyncHandler(async (req, res, next) => {
       filter: { slug: baseSlug, _id: { $ne: orgId }, isDeleted: false },
     });
     if (existingSlug) {
-      return next(new Error("Slug already taken", { cause: 409 }));
+      return next(httpError(409, "Slug already taken"));
     }
     update.slug = baseSlug;
   }
 
   if (Object.keys(update).length === 0) {
-    return next(new Error("No fields to update", { cause: 400 }));
+    return next(httpError(400, "No fields to update"));
   }
 
   const updated = await dbService.findOneAndUpdate({
@@ -279,7 +287,7 @@ export const deleteOrg = asyncHandler(async (req, res, next) => {
     model: organizationModel,
     filter: { _id: orgId, isDeleted: false },
   });
-  if (!org) return next(new Error("Organization not found", { cause: 404 }));
+  if (!org) return next(httpError(404, "Organization not found"));
 
   await dbService.updateOne({
     model: organizationModel,
@@ -291,6 +299,16 @@ export const deleteOrg = asyncHandler(async (req, res, next) => {
     model: memberModel,
     filter: { organizationId: orgId },
     data: { isActive: false },
+  });
+
+  await recordAudit({
+    req,
+    actorId: req.user._id,
+    orgId,
+    action: auditActions.ORG_DELETE,
+    targetType: "Organization",
+    targetId: orgId,
+    meta: { name: org.name, slug: org.slug },
   });
 
   return successResponse({ res, message: "Organization deleted" });
@@ -442,7 +460,7 @@ export const getOrgChatRooms = asyncHandler(async (req, res, next) => {
     filter: { organizationId: orgId, userId: req.user._id, isActive: true },
   });
   if (!member)
-    return next(new Error("Not a member of this organization", { cause: 403 }));
+    return next(httpError(403, "Not a member of this organization"));
 
   const rooms = await dbService.find({
     model: chatRoomModel,

@@ -1,21 +1,13 @@
 import Sprint from "../../../DB/Model/sprint.model.js";
 import Task from "../../../DB/Model/task.model.js";
-import memberModel from "../../../DB/Model/member.model.js";
 import * as dbService from "../../../DB/db.service.js";
 import { asyncHandler } from "../../../utils/response/error.response.js";
 import { successResponse } from "../../../utils/response/success.response.js";
 
 // ✅ Phase 9 caching (optional but recommended)
 import { cache, cacheKey } from "../../../utils/cache/lru.cache.js";
-
-async function requireOrgMember(orgId, userId) {
-  const member = await dbService.findOne({
-    model: memberModel,
-    filter: { organizationId: orgId, userId, isActive: true },
-  });
-  if (!member) throw new Error("Not a member of this organization", { cause: 403 });
-  return member;
-}
+import { requireOrgMember } from "../../../utils/permissions/org.permissions.js";
+import { httpError } from "../../../utils/errors/index.js";
 
 function startOfDay(d) {
   const x = new Date(d);
@@ -55,7 +47,7 @@ export const sprintReport = asyncHandler(async (req, res, next) => {
     model: Sprint,
     filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
   });
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   const filter = {
     organizationId: orgId,
@@ -136,7 +128,7 @@ export const burndown = asyncHandler(async (req, res, next) => {
     model: Sprint,
     filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
   });
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   const days = eachDayInclusive(sprint.startDate, sprint.endDate);
 
@@ -207,7 +199,7 @@ export const burnup = asyncHandler(async (req, res, next) => {
     model: Sprint,
     filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
   });
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   const days = eachDayInclusive(sprint.startDate, sprint.endDate);
 
@@ -275,7 +267,7 @@ export const cumulativeFlow = asyncHandler(async (req, res, next) => {
     model: Sprint,
     filter: { _id: sprintId, organizationId: orgId, spaceId, isDeleted: false },
   });
-  if (!sprint) return next(new Error("Sprint not found", { cause: 404 }));
+  if (!sprint) return next(httpError(404, "Sprint not found"));
 
   const days = eachDayInclusive(sprint.startDate, sprint.endDate);
 

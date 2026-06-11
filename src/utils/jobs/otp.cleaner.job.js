@@ -1,9 +1,11 @@
 import cron from "node-cron";
-// ✅ FIX: Correct import path (uppercase Model, not lowercase model)
 import userModel from "../../DB/Model/user.model.js";
+import { childLogger } from "../logger/logger.js";
+
+const log = childLogger("otp-cleaner");
 
 export const startOTPCleanerJob = () => {
-  console.log("OTP Cleaner Job Initialized...");
+  log.info("OTP cleaner job initialized");
 
   // Run every 6 hours
   cron.schedule("0 */6 * * *", async () => {
@@ -89,9 +91,9 @@ export const startOTPCleanerJob = () => {
         },
       );
 
-      console.log("OTP Cleaner: expired OTPs cleaned successfully");
-    } catch (error) {
-      console.error("OTP Cleaner Error:", error.message);
+      log.debug("expired OTPs cleaned");
+    } catch (err) {
+      log.error({ err }, "OTP cleaner tick failed");
     }
   });
 };

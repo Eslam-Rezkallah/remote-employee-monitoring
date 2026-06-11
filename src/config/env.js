@@ -9,7 +9,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mood = process.env.MOOD || "DEV";
 const envFile = mood === "PROD" ? ".env.prod" : ".env.dev";
 
-dotenv.config({ path: path.resolve(__dirname, envFile) });
+// Jest sets NODE_ENV=test automatically. In that case the test suite
+// has already seeded process.env (tests/integration/setup.js), and we
+// must NOT let dotenv read .env.dev — it would silently re-introduce
+// the developer's REDIS_URL / Cloudinary creds and break test isolation.
+if (process.env.NODE_ENV !== "test") {
+  dotenv.config({ path: path.resolve(__dirname, envFile) });
+}
 
 // ── Validation schema ──────────────────────────────────────
 const envSchema = joi
@@ -42,6 +48,10 @@ const envSchema = joi
       .string()
       .uri({ scheme: ["redis", "rediss"] })
       .optional(),
+    // Hard-disable Redis even when REDIS_URL is set. Useful in dev
+    // when you don't want to run the Docker container — silences
+    // every reconnect log + falls back to in-memory stores.
+    REDIS_DISABLED: joi.boolean().default(false),
     // Cloudinary
     CLOUDINARY_CLOUD_NAME: joi.string().required(),
     CLOUDINARY_API_KEY: joi.string().required(),
@@ -53,6 +63,22 @@ const envSchema = joi
     // AI (optional)
     OPENAI_API_KEY: joi.string().allow("").optional(),
     OPENAI_MODEL: joi.string().default("gpt-4o-mini"),
+
+    // LiveKit (Voice/Video SFU) — optional; if any of the three
+    // is missing the call module will refuse to mint tokens and
+    // log a clear error rather than serving broken calls.
+    LIVEKIT_URL: joi
+      .string()
+      .uri({ scheme: ["ws", "wss", "http", "https"] })
+      .allow("")
+      .optional(),
+    LIVEKIT_API_KEY: joi.string().allow("").optional(),
+    LIVEKIT_API_SECRET: joi.string().allow("").optional(),
+    LIVEKIT_TOKEN_TTL: joi.string().default("4h"),
+    LIVEKIT_WEBHOOK_PATH: joi
+      .string()
+      .pattern(/^\/[\w\-/]+$/)
+      .default("/calls/livekit/webhook"),
 
     // Frontend
     FRONTEND_URL: joi.string().uri().default("http://localhost:3000"),

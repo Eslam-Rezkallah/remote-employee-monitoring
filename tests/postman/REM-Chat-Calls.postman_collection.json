@@ -1,0 +1,559 @@
+{
+  "info": {
+    "_postman_id": "rem-chat-calls-2026-06",
+    "name": "REM — Chat & Calls",
+    "description": "Focused collection for chat + calls QA.\n\nVariables (in environment):\n  baseUrl, testEmail, testPassword, accessToken (auto), refreshToken (auto), userId (auto), roomId, messageId, callId, targetUserId, organizationId.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/healthz", "host": ["{{baseUrl}}"], "path": ["healthz"] }
+          }
+        },
+        {
+          "name": "GET /readyz",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/readyz", "host": ["{{baseUrl}}"], "path": ["readyz"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "POST /auth/signup",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/signup", "host": ["{{baseUrl}}"], "path": ["auth", "signup"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"qa-tester\",\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\",\n  \"confirmPassword\": \"{{testPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "PATCH /auth/confirm-email",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/confirm-email", "host": ["{{baseUrl}}"], "path": ["auth", "confirm-email"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"PASTE_OTP\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data?.accessToken) {",
+                  "  pm.environment.set('accessToken', j.data.accessToken);",
+                  "  pm.environment.set('refreshToken', j.data.refreshToken);",
+                  "  pm.environment.set('userId', j.data.user._id);",
+                  "  console.log('Saved accessToken + userId');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"password\": \"{{testPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        },
+        {
+          "name": "POST /auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/logout", "host": ["{{baseUrl}}"], "path": ["auth", "logout"] },
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Chat rooms",
+      "item": [
+        {
+          "name": "GET /chat/rooms",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const rooms = j.data?.rooms || j.data?.items || j.data || [];",
+                  "if (Array.isArray(rooms) && rooms.length) {",
+                  "  pm.environment.set('roomId', rooms[0]._id);",
+                  "  console.log('Saved roomId', rooms[0]._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms", "host": ["{{baseUrl}}"], "path": ["chat", "rooms"] }
+          }
+        },
+        {
+          "name": "GET /chat/rooms/unread-counts",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/unread-counts", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "unread-counts"] }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/direct",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/direct", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "direct"] },
+            "body": { "mode": "raw", "raw": "{\n  \"targetUserId\": \"{{targetUserId}}\"\n}" }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/group",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/group", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "group"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"QA Group\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"memberIds\": [\"{{targetUserId}}\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /chat/rooms/channel",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/channel", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "channel"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"qa-channel\",\n  \"organizationId\": \"{{organizationId}}\",\n  \"isPrivate\": false\n}"
+            }
+          }
+        },
+        {
+          "name": "GET /chat/rooms/:roomId",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}"] }
+          }
+        },
+        {
+          "name": "PATCH /chat/rooms/:roomId (branding)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branding\": {\n    \"color\": \"#3B82F6\",\n    \"topic\": \"Sprint planning room\",\n    \"tagline\": \"Async-first decisions\"\n  }\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Messages",
+      "item": [
+        {
+          "name": "POST send message",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data?.message?._id) pm.environment.set('messageId', j.data.message._id);",
+                  "else if (j.data?._id) pm.environment.set('messageId', j.data._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"Hello from Postman QA\",\n  \"messageType\": \"text\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET list messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages?page=1&limit=30",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "messages"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "30" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET search messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/search?q=hello",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "messages", "search"],
+              "query": [{ "key": "q", "value": "hello" }]
+            }
+          }
+        },
+        {
+          "name": "PATCH edit message",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}"] },
+            "body": { "mode": "raw", "raw": "{\n  \"content\": \"Edited from Postman\"\n}" }
+          }
+        },
+        {
+          "name": "DELETE message (for me)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}?deleteType=me",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}"],
+              "query": [{ "key": "deleteType", "value": "me" }]
+            }
+          }
+        },
+        {
+          "name": "DELETE message (for everyone)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}?deleteType=everyone",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}"],
+              "query": [{ "key": "deleteType", "value": "everyone" }]
+            }
+          }
+        },
+        {
+          "name": "POST forward message",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/forward", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "forward"] },
+            "body": { "mode": "raw", "raw": "{\n  \"sourceMessageId\": \"{{messageId}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Receipts / Reactions / Threads / Pin / Save",
+      "item": [
+        {
+          "name": "PATCH mark seen",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/seen", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "seen"] }
+          }
+        },
+        {
+          "name": "PATCH mark delivered",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/delivered", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "delivered"] }
+          }
+        },
+        {
+          "name": "POST reaction (👍)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/reactions", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "reactions"] },
+            "body": { "mode": "raw", "raw": "{\n  \"reaction\": \"👍\"\n}" }
+          }
+        },
+        {
+          "name": "DELETE reaction",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/reactions", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "reactions"] }
+          }
+        },
+        {
+          "name": "POST reply (creates thread)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"replying in thread\",\n  \"replyTo\": \"{{messageId}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "GET thread",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/thread", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "thread"] }
+          }
+        },
+        {
+          "name": "POST pin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/pin", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "pin"] }
+          }
+        },
+        {
+          "name": "DELETE unpin",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/pin", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "pin"] }
+          }
+        },
+        {
+          "name": "GET pinned",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/pinned", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "pinned"] }
+          }
+        },
+        {
+          "name": "POST save (bookmark)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/save", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "save"] },
+            "body": { "mode": "raw", "raw": "{\n  \"note\": \"keep for later\"\n}" }
+          }
+        },
+        {
+          "name": "DELETE unsave",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/messages/{{messageId}}/save", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "messages", "{{messageId}}", "save"] }
+          }
+        },
+        {
+          "name": "GET /me/saved-messages",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/me/saved-messages", "host": ["{{baseUrl}}"], "path": ["me", "saved-messages"] }
+          }
+        },
+        {
+          "name": "GET /me/mentions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/me/mentions", "host": ["{{baseUrl}}"], "path": ["me", "mentions"] }
+          }
+        },
+        {
+          "name": "GET /notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/notifications", "host": ["{{baseUrl}}"], "path": ["notifications"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Calls (REST)",
+      "item": [
+        {
+          "name": "GET call history",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "rooms", "{{roomId}}", "calls"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET active call",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.data?.call?._id) {",
+                  "  pm.environment.set('callId', j.data.call._id);",
+                  "  console.log('Saved active callId', j.data.call._id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/active", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "active"] }
+          }
+        },
+        {
+          "name": "GET call detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "{{callId}}"] }
+          }
+        },
+        {
+          "name": "POST LiveKit join token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns token + url', () => {",
+                  "  pm.expect(j.data.token).to.be.a('string').and.have.length.greaterThan(50);",
+                  "  pm.expect(j.data.url).to.match(/^wss?:\\/\\//);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/livekit-token", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "{{callId}}", "livekit-token"] },
+            "body": { "mode": "raw", "raw": "{\n  \"deviceId\": \"postman-desktop-1\"\n}" }
+          }
+        },
+        {
+          "name": "POST start recording",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "{{callId}}", "recording"] }
+          }
+        },
+        {
+          "name": "DELETE stop recording",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "{{callId}}", "recording"] }
+          }
+        },
+        {
+          "name": "GET recording download URL",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/chat/rooms/{{roomId}}/calls/{{callId}}/recording/download", "host": ["{{baseUrl}}"], "path": ["chat", "rooms", "{{roomId}}", "calls", "{{callId}}", "recording", "download"] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import * as memberService from "./service/member.service.js";
 import * as invitationService from "./service/invitation.service.js";
 import spaceController from "../space/space.controller.js";
 import activityController from "../activity/activity.controller.js";
+import webhookController from "../webhook/webhook.controller.js";
 import {
   uploadFileDisk,
   fileValidations,
@@ -142,5 +143,6 @@ router.get(
 
 router.use("/:orgId/spaces", spaceController);
 router.use("/:orgId/activity", activityController);
+router.use("/:orgId/webhooks", webhookController);
 
 export default router;

@@ -1,7 +1,24 @@
 # ─── Environment ───────────────────────────────────────────
+# Block every env variant anywhere in the tree, but allow templates.
 .env
 .env.*
+**/.env
+**/.env.*
+!**/.env.example
 !.env.example
+
+# ─── Secrets, keys, credentials ────────────────────────────
+# Defensive catch-all in case someone drops creds into the tree.
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*credentials*.json
+service-account*.json
+!**/credentials.example.json
 
 # ─── Node ──────────────────────────────────────────────────
 node_modules/

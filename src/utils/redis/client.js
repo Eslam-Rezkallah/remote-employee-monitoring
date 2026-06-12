@@ -89,22 +89,30 @@ function buildClient(name) {
 }
 
 /**
+ * A client whose status is "end" has permanently given up reconnecting
+ * (retryStrategy returned null) or was explicitly quit/disconnected. Issuing
+ * commands against it only throws "Connection is closed." on every call, so we
+ * treat it as absent and let callers fall back to their in-memory paths.
+ */
+const usable = (client) => (client && client.status !== "end" ? client : null);
+
+/**
  * Lazy singletons. Three separate clients because Socket.IO Redis adapter
  * requires dedicated pub/sub clients that can't be used for regular commands.
  */
 export const getRedis = () => {
   if (!mainClient) mainClient = buildClient("redis-main");
-  return mainClient;
+  return usable(mainClient);
 };
 
 export const getPubClient = () => {
   if (!pubClient) pubClient = buildClient("redis-pub");
-  return pubClient;
+  return usable(pubClient);
 };
 
 export const getSubClient = () => {
   if (!subClient) subClient = buildClient("redis-sub");
-  return subClient;
+  return usable(subClient);
 };
 
 /** Liveness probe used by /readyz */

@@ -45,13 +45,12 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      # The lockfile is generated with npm 11 (ships with Node 24+). npm 10,
-      # bundled with Node 20, hoists this dependency graph (OpenTelemetry peer
-      # deps, fsevents) differently and rejects the lock with EUSAGE. Pin the
-      # npm major to match the one that generates the lock.
-      - run: npm install -g npm@11
-
-      - run: npm ci --no-audit --no-fund
+      # Use `npm install` (not `npm ci`) so the build tolerates lockfiles
+      # generated on a different OS / npm version. This dependency graph
+      # (OpenTelemetry peer deps + platform-gated optionals like fsevents)
+      # resolves differently per platform, and `npm ci` rejects any
+      # cross-environment lock with EUSAGE. `npm install` reconciles instead.
+      - run: npm install --no-audit --no-fund
 
       # Syntax-check every JS file in src/ — catches missing imports,
       # broken syntax, and the kind of regression the httpError migration
@@ -110,12 +109,11 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      # The lockfile is generated with npm 11 (ships with Node 24+). npm 10,
-      # bundled with Node 20, hoists this dependency graph (OpenTelemetry peer
-      # deps, fsevents) differently and rejects the lock with EUSAGE. Pin the
-      # npm major to match the one that generates the lock.
-      - run: npm install -g npm@11
-
-      - run: npm ci --no-audit --no-fund
+      # Use `npm install` (not `npm ci`) so the build tolerates lockfiles
+      # generated on a different OS / npm version. This dependency graph
+      # (OpenTelemetry peer deps + platform-gated optionals like fsevents)
+      # resolves differently per platform, and `npm ci` rejects any
+      # cross-environment lock with EUSAGE. `npm install` reconciles instead.
+      - run: npm install --no-audit --no-fund
 
       - run: npm test --if-present

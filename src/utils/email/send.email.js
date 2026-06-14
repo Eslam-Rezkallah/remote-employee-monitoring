@@ -9,7 +9,9 @@ export const sendEmail = async ({
   attachments = [],
 } = {}) => {
   const transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,          // SSL — avoids the port-587 block on Railway
     auth: {
       user: process.env.EMAIL,
       pass: process.env.EMAIL_PASSWORD,

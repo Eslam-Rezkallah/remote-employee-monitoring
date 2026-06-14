@@ -279,6 +279,19 @@ const bootstrap = async (app, express) => {
   } catch { /* ignore */ }
 
   if (servingFrontend) {
+    // CSP for the Angular SPA — allow Google Identity Services (OAuth button)
+    // and Cloudinary uploads while keeping everything else tight.
+    const spaCsp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https: http:",
+      "connect-src 'self' ws: wss: https://accounts.google.com https://oauth2.googleapis.com https://api.cloudinary.com",
+      "frame-src https://accounts.google.com",
+      "object-src 'none'",
+    ].join("; ");
+
     // Static assets (JS, CSS, images, fonts…)
     app.use(
       express.static(frontendDist, {
@@ -288,12 +301,14 @@ const bootstrap = async (app, express) => {
           // index.html must never be cached so fresh deploys are picked up
           if (filePath.endsWith("index.html")) {
             res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+            res.setHeader("Content-Security-Policy", spaCsp);
           }
         },
       }),
     );
     // Angular router — all non-API GET requests return index.html
     app.get("*", (req, res) => {
+      res.setHeader("Content-Security-Policy", spaCsp);
       res.sendFile(indexHtml);
     });
     logger.info({ dist: frontendDist }, "serving Angular SPA from backend");

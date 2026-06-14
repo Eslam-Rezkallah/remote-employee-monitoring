@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
+    "deploy:build-fe": "cd ../Front && npm run build -- --configuration=production && cp -r dist/remote-employee-monitoring/browser/. ../Back/public/",
+    "deploy:build": "npm run deploy:build-fe && echo '✓ Frontend built and copied to Back/public/'",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --passWithNoTests",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "migrate": "node scripts/migrate.js",

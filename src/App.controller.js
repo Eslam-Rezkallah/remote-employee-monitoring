@@ -64,9 +64,23 @@ const bootstrap = async (app, express) => {
   app.use(metricsMiddleware());
   mountMetricsRoute(app);
 
+  // When the Angular SPA is served FROM this backend (single-origin deployment),
+  // CORS is irrelevant for same-origin requests.  We still configure it so
+  // out-of-process clients (Postman, mobile apps, other FE origins) can call
+  // the API. Allow the explicitly configured FRONTEND_URL plus the same host.
+  const allowedOrigins = new Set(
+    [config.app.frontendUrl].filter(Boolean)
+  );
   app.use(
     cors({
-      origin: config.app.frontendUrl,
+      origin: (origin, cb) => {
+        // Allow requests with no origin (curl, Postman, same-origin browser)
+        if (!origin) return cb(null, true);
+        if (allowedOrigins.size === 0 || allowedOrigins.has(origin)) {
+          return cb(null, true);
+        }
+        return cb(null, false);
+      },
       credentials: true,
     }),
   );
@@ -252,14 +266,47 @@ const bootstrap = async (app, express) => {
   // ─── Calls ──────────────────────────────────────────────────
   mountVersioned("/chat/rooms/:roomId/calls", callController);
 
-  // ─── 404 ────────────────────────────────────────────────────
-  app.all("*", (req, res) => {
-    res.status(404).json({
-      success: false,
-      message: `Route ${req.method} ${req.originalUrl} not found`,
-      data: null,
+  // ─── Angular SPA (production) ───────────────────────────────
+  // When the Angular build exists in ./public we serve it here so a single
+  // Railway/Render/Docker deployment hosts both frontend and backend.
+  // API routes are all mounted above so they take priority.
+  const frontendDist = path.resolve("./public");
+  const indexHtml    = path.join(frontendDist, "index.html");
+  let servingFrontend = false;
+  try {
+    const fs = await import("fs");
+    servingFrontend = fs.existsSync(indexHtml);
+  } catch { /* ignore */ }
+
+  if (servingFrontend) {
+    // Static assets (JS, CSS, images, fonts…)
+    app.use(
+      express.static(frontendDist, {
+        maxAge: "1y",                   // immutable hashed files can be cached long
+        index: false,                   // let the catch-all below handle /
+        setHeaders(res, filePath) {
+          // index.html must never be cached so fresh deploys are picked up
+          if (filePath.endsWith("index.html")) {
+            res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+          }
+        },
+      }),
+    );
+    // Angular router — all non-API GET requests return index.html
+    app.get("*", (req, res) => {
+      res.sendFile(indexHtml);
     });
-  });
+    logger.info({ dist: frontendDist }, "serving Angular SPA from backend");
+  } else {
+    // ─── 404 (API-only mode, no frontend build) ──────────────
+    app.all("*", (req, res) => {
+      res.status(404).json({
+        success: false,
+        message: `Route ${req.method} ${req.originalUrl} not found`,
+        data: null,
+      });
+    });
+  }
 
   // ─── Error Handler ──────────────────────────────────────────
   app.use(globalErrorHandling);

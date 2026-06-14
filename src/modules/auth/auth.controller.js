@@ -80,7 +80,6 @@ router.post(
 router.post(
   "/logout",
   authentication(),
-  validation(validators.refreshToken),
   logoutService.logout,
 );
 

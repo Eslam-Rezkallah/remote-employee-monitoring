@@ -9,7 +9,9 @@
 
 # ─── Secrets, keys, credentials ────────────────────────────
 # Defensive catch-all in case someone drops creds into the tree.
-secrets/
+# secrets/ — keep secrets.manager.js but block credential files
+secrets/*.json
+secrets/*.env
 *.pem
 *.key
 *.p12

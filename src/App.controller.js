@@ -93,14 +93,17 @@ const bootstrap = async (app, express) => {
     helmet({
       contentSecurityPolicy: {
         directives: {
-          defaultSrc:  ["'self'"],
-          scriptSrc:   ["'self'", "'unsafe-inline'", "https://accounts.google.com", "https://apis.google.com"],
-          styleSrc:    ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-          fontSrc:     ["'self'", "https://fonts.gstatic.com", "data:"],
-          imgSrc:      ["'self'", "data:", "blob:", "https:", "http:"],
-          connectSrc:  ["'self'", "ws:", "wss:", "https://accounts.google.com", "https://oauth2.googleapis.com", "https://api.cloudinary.com"],
-          frameSrc:    ["https://accounts.google.com"],
-          objectSrc:   ["'none'"],
+          defaultSrc:    ["'self'"],
+          scriptSrc:     ["'self'", "'unsafe-inline'", "https://accounts.google.com", "https://apis.google.com"],
+          // Google GSI uses inline onclick handlers — scriptSrcAttr must allow them
+          scriptSrcAttr: ["'unsafe-inline'"],
+          // Google GSI loads its own stylesheet from accounts.google.com
+          styleSrc:      ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://accounts.google.com"],
+          fontSrc:       ["'self'", "https://fonts.gstatic.com", "data:"],
+          imgSrc:        ["'self'", "data:", "blob:", "https:", "http:"],
+          connectSrc:    ["'self'", "ws:", "wss:", "https://accounts.google.com", "https://oauth2.googleapis.com", "https://api.cloudinary.com"],
+          frameSrc:      ["https://accounts.google.com"],
+          objectSrc:     ["'none'"],
         },
       },
     }),

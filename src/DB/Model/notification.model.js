@@ -25,6 +25,21 @@ export const notificationTypes = {
   // Sprints
   SPRINT_STARTED: "sprint_started",
   SPRINT_CLOSED: "sprint_closed",
+
+  // Messages
+  NEW_MESSAGE: "new_message",             // new DM received
+  MESSAGE_MENTION: "message_mention",     // @mentioned in chat
+
+  // Meetings
+  MEETING_INVITED: "meeting_invited",
+  MEETING_STARTING_SOON: "meeting_starting_soon",
+  MEETING_CANCELLED: "meeting_cancelled",
+
+  // Reminders
+  REMINDER_DUE: "reminder_due",
+
+  // Calls
+  CALL_INCOMING: "call_incoming",         // missed / incoming call notification
 };
 
 const notificationSchema = new Schema(

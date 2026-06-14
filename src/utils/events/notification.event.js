@@ -500,3 +500,50 @@ notificationEvent.on("sprint_closed", async (payload) => {
     entityId: sprintId,
   });
 });
+
+// ─────────────────────────────────────────────────────────────
+// MESSAGE LISTENERS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Emitted by: shared.message.service → createMessage (DM rooms only)
+ * Payload: { recipientIds, triggeredById, senderName, roomId, messageId, contentPreview, roomName }
+ * Who gets it: all DM/group members except the sender who are offline from that room
+ */
+notificationEvent.on("new_message", async (payload) => {
+  const { recipientIds, triggeredById, senderName, roomId, messageId, contentPreview, roomName } =
+    payload;
+
+  await notifyMany(recipientIds, {
+    triggeredById,
+    type: "new_message",
+    title: roomName
+      ? `💬 ${senderName} in ${roomName}`
+      : `💬 New message from ${senderName}`,
+    body: contentPreview || null,
+    entityType: "Message",
+    entityId: messageId,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// CALL LISTENERS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Emitted by: call.socket → call:initiate (when the call is missed / for persistence)
+ * Payload: { recipientIds, triggeredById, callerName, callId, roomId, type }
+ * Who gets it: all call targets
+ */
+notificationEvent.on("call_incoming", async (payload) => {
+  const { recipientIds, triggeredById, callerName, callId, roomId, type } = payload;
+
+  await notifyMany(recipientIds, {
+    triggeredById,
+    type: "call_incoming",
+    title: `📞 Incoming ${type === "video" ? "video" : "voice"} call from ${callerName}`,
+    body: null,
+    entityType: "Call",
+    entityId: callId,
+  });
+});

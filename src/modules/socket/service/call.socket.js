@@ -211,7 +211,7 @@ export const registerCallSocket = (namespace) => {
           // join socket room for this call
           socket.join(`call:${call._id}`);
 
-          // ring all target users
+          // ring all target users via socket (real-time banner)
           targetUserIds.forEach((targetId) => {
             namespace.to(`user_${targetId}`).emit(EVENTS.CALL_INCOMING, {
               callId: call._id,
@@ -229,6 +229,24 @@ export const registerCallSocket = (namespace) => {
               })),
             });
           });
+
+          // persist a notification so the bell shows it even if the
+          // socket event was missed (user offline or page not loaded yet)
+          try {
+            const { notificationEvent } = await import(
+              "../../../utils/events/notification.event.js"
+            );
+            notificationEvent.emit("call_incoming", {
+              recipientIds: targetUserIds,
+              triggeredById: userId,
+              callerName: user.username,
+              callId: call._id,
+              roomId,
+              type,
+            });
+          } catch (err) {
+            log.warn({ err: err.message }, "call_incoming notification failed");
+          }
 
           // confirm to caller
           socket.emit("call:initiated", {

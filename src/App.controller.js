@@ -91,6 +91,11 @@ const bootstrap = async (app, express) => {
   // correct CSP from the start. API JSON responses are unaffected by CSP.
   app.use(
     helmet({
+      // Google Sign-In popup communicates back via window.postMessage.
+      // The default 'same-origin' COOP policy blocks that channel.
+      // 'same-origin-allow-popups' keeps the protection while allowing
+      // popups we opened (the Google auth window) to post messages back.
+      crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
       contentSecurityPolicy: {
         directives: {
           defaultSrc:    ["'self'"],

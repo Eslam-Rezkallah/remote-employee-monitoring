@@ -84,7 +84,27 @@ const bootstrap = async (app, express) => {
       credentials: true,
     }),
   );
-  app.use(helmet());
+  // Configure Helmet's CSP globally so it works for the Angular SPA.
+  // Per-route res.setHeader() overrides are unreliable because Helmet's
+  // middleware runs early and some Express internals re-check headers.
+  // Setting it here means every HTML page (including the SPA) gets the
+  // correct CSP from the start. API JSON responses are unaffected by CSP.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc:  ["'self'"],
+          scriptSrc:   ["'self'", "'unsafe-inline'", "https://accounts.google.com", "https://apis.google.com"],
+          styleSrc:    ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc:     ["'self'", "https://fonts.gstatic.com", "data:"],
+          imgSrc:      ["'self'", "data:", "blob:", "https:", "http:"],
+          connectSrc:  ["'self'", "ws:", "wss:", "https://accounts.google.com", "https://oauth2.googleapis.com", "https://api.cloudinary.com"],
+          frameSrc:    ["https://accounts.google.com"],
+          objectSrc:   ["'none'"],
+        },
+      },
+    }),
+  );
 
   // ─── LiveKit webhook ────────────────────────────────────────
   // Mounted BEFORE express.json() because LiveKit signs the RAW
@@ -279,20 +299,8 @@ const bootstrap = async (app, express) => {
   } catch { /* ignore */ }
 
   if (servingFrontend) {
-    // CSP for the Angular SPA — allow Google Identity Services (OAuth button)
-    // and Cloudinary uploads while keeping everything else tight.
-    const spaCsp = [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com data:",
-      "img-src 'self' data: blob: https: http:",
-      "connect-src 'self' ws: wss: https://accounts.google.com https://oauth2.googleapis.com https://api.cloudinary.com",
-      "frame-src https://accounts.google.com",
-      "object-src 'none'",
-    ].join("; ");
-
     // Static assets (JS, CSS, images, fonts…)
+    // CSP is now set globally via Helmet above — no per-route override needed.
     app.use(
       express.static(frontendDist, {
         maxAge: "1y",                   // immutable hashed files can be cached long
@@ -301,14 +309,12 @@ const bootstrap = async (app, express) => {
           // index.html must never be cached so fresh deploys are picked up
           if (filePath.endsWith("index.html")) {
             res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-            res.setHeader("Content-Security-Policy", spaCsp);
           }
         },
       }),
     );
     // Angular router — all non-API GET requests return index.html
     app.get("*", (req, res) => {
-      res.setHeader("Content-Security-Policy", spaCsp);
       res.sendFile(indexHtml);
     });
     logger.info({ dist: frontendDist }, "serving Angular SPA from backend");

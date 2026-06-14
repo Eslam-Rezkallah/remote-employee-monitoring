@@ -5,6 +5,7 @@
  *   GET    /org/:orgId/webhooks               list
  *   PATCH  /org/:orgId/webhooks/:id           update (name/url/events/isActive)
  *   DELETE /org/:orgId/webhooks/:id           remove
+ *   POST   /org/:orgId/webhooks/:id/test      send a synthetic "ping" delivery
  *   POST   /org/:orgId/webhooks/:id/rotate    rotate the signing secret
  *
  * All endpoints require org owner/admin — webhooks expose org data
@@ -20,9 +21,9 @@ import { successResponse } from "../../utils/response/success.response.js";
 import { httpError } from "../../utils/errors/index.js";
 import { requireOrgAdmin } from "../../utils/permissions/org.permissions.js";
 import webhookSubscriptionModel from "../../DB/Model/webhookSubscription.model.js";
-import { generateWebhookSecret } from "../../utils/webhooks/webhook.service.js";
+import { generateWebhookSecret, signPayload } from "../../utils/webhooks/webhook.service.js";
 
-const router = Router();
+const router = Router({ mergeParams: true });
 router.use(authentication());
 
 // Whitelist of event names a subscription is allowed to opt into.
@@ -186,6 +187,59 @@ router.delete(
     });
     if (r.deletedCount === 0) throw httpError(404, "Webhook not found");
     return successResponse({ res, message: "Webhook removed" });
+  }),
+);
+
+// POST /org/:orgId/webhooks/:id/test — send a synthetic ping to the webhook URL
+router.post(
+  "/:id/test",
+  validation(idSchema),
+  asyncHandler(async (req, res) => {
+    const { orgId, id } = req.params;
+    await requireOrgAdmin(orgId, req.user._id);
+
+    const sub = await webhookSubscriptionModel
+      .findOne({ _id: id, organizationId: orgId })
+      .select("+secret targetUrl isActive");
+    if (!sub) throw httpError(404, "Webhook not found");
+    if (!sub.isActive) throw httpError(400, "Webhook is disabled. Enable it before testing.");
+
+    const payload = {
+      event: "ping",
+      organizationId: String(orgId),
+      timestamp: new Date().toISOString(),
+      data: { message: "This is a test delivery from Remote Monitor." },
+    };
+    const body = JSON.stringify(payload);
+    const signature = signPayload(sub.secret, body);
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+    let statusCode = null;
+    try {
+      const httpRes = await fetch(sub.targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-REM-Event": "ping",
+          "X-REM-Signature-256": signature,
+          "X-REM-Timestamp": String(Math.floor(Date.now() / 1000)),
+        },
+        body,
+        signal: controller.signal,
+      });
+      statusCode = httpRes.status;
+    } catch (err) {
+      const msg = err.name === "AbortError" ? "Request timed out (10 s)" : err.message;
+      throw httpError(502, `Test delivery failed: ${msg}`);
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (statusCode >= 200 && statusCode < 400) {
+      return successResponse({ res, message: `Test delivered — target responded ${statusCode}` });
+    }
+    throw httpError(502, `Test delivery failed — target responded HTTP ${statusCode}`);
   }),
 );
 

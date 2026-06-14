@@ -20,8 +20,7 @@ WORKDIR /app
 RUN apk add --no-cache tini
 
 COPY package.json package-lock.json* ./
-RUN --mount=type=cache,id=npm,target=/root/.npm \
-    npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund
 
 # ── Stage 2: runtime ───────────────────────────────────────────
 FROM node:20-alpine AS runtime

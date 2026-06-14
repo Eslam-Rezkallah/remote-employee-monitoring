@@ -44,7 +44,9 @@ FE_Angular
 docs
 
 # Python AI services (separate container if/when used)
-ai-services
+# Keep the JS ports (*.ai.service.js) — exclude only Python files
+ai-services/*.py
+ai-services/__pycache__
 
 # Other
 *.bak

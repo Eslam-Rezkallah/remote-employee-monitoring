@@ -10,6 +10,11 @@ export const EntityType = Object.freeze({
   Sprint: "Sprint",
   Space: "Space",
   Organization: "Organization",
+  Message: "Message",
+  ChatRoom: "ChatRoom",
+  Meeting: "Meeting",
+  Reminder: "Reminder",
+  Call: "Call",
 });
 
 // Subset allowed in Notification.entityType
@@ -19,6 +24,11 @@ export const NotificationEntityTypes = Object.freeze({
   Project: EntityType.Project,
   Team: EntityType.Team,
   Sprint: EntityType.Sprint,
+  Message: EntityType.Message,
+  ChatRoom: EntityType.ChatRoom,
+  Meeting: EntityType.Meeting,
+  Reminder: EntityType.Reminder,
+  Call: EntityType.Call,
 });
 
 // Subset allowed in RecentActivity.entityType

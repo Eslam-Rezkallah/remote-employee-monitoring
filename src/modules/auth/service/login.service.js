@@ -261,12 +261,18 @@ export const loginWithGoogle = asyncHandler(async (req, res, next) => {
     return next(httpError(400, "ID token is required"));
   }
 
-  const client = new OAuth2Client();
-  const ticket = await client.verifyIdToken({
-    idToken,
-    audience: process.env.GOOGLE_CLIENT_ID,
-  });
-  const payload = ticket.getPayload();
+  let payload;
+  try {
+    const client = new OAuth2Client();
+    const ticket = await client.verifyIdToken({
+      idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+    payload = ticket.getPayload();
+  } catch (googleErr) {
+    console.error('[loginWithGoogle] token verify failed:', googleErr.message);
+    return next(httpError(401, `Google token invalid: ${googleErr.message}`));
+  }
 
   if (!payload.email_verified) {
     return next(httpError(401, "Google email not verified"));

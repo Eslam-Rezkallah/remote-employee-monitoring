@@ -74,10 +74,9 @@ export const getMyOrganizations = asyncHandler(async (req, res, next) => {
   const organizations = memberships
     .filter((m) => m.organizationId)
     .map((m) => ({
-      ...m.organizationId,
+      ...m.organizationId.toObject(),
       memberRole: m.role,
       joinedAt: m.joinedAt,
-    
     }));
 
   return successResponse({ res, data: { organizations } });

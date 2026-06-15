@@ -335,14 +335,14 @@ export async function createMessage({
     }
   })();
 
-  // Fan out mention notifications. Like the comment_mention pattern,
-  // we go through the central event bus so the socket transport
-  // pushes them in real time and the DB row is persisted.
+  // Fan out mention notifications and per-room unread notifications.
+  // All via the central event bus → socket transport for real-time
+  // AND persisted in DB so the bell works when user is offline.
+  const { notificationEvent } = await import(
+    "../../../utils/events/notification.event.js"
+  );
+
   if (mentions.length > 0) {
-    // Lazy-imported to avoid a circular dep at module load time.
-    const { notificationEvent } = await import(
-      "../../../utils/events/notification.event.js"
-    );
     notificationEvent.emit("message_mention", {
       mentionedUserIds: mentions.map((m) => m.toString()),
       triggeredById: userId,
@@ -350,6 +350,50 @@ export async function createMessage({
       messageId: message._id,
       contentPreview: content.trim().slice(0, 100),
     });
+  }
+
+  // For DM and group rooms, notify every member who is NOT the sender.
+  // Channels can have many members; they rely on @mentions.
+  // Fire-and-forget: we need the room type, but room was loaded by the
+  // caller guard. Re-query with only the fields we need — this is a
+  // background fan-out and must never block the return.
+  if (messageType !== "system") {
+    (async () => {
+      try {
+        const room = await chatRoomModel
+          .findById(roomId)
+          .select("type members name")
+          .lean();
+        if (!room) return;
+
+        // Limit to DM and group — channels use mentions to avoid spam
+        if (room.type !== "direct" && room.type !== "group") return;
+
+        const mentionedIds = new Set(mentions.map((m) => m.toString()));
+        const recipientIds = room.members
+          .map((m) => m.toString())
+          .filter((id) => id !== userId.toString() && !mentionedIds.has(id));
+
+        if (recipientIds.length === 0) return;
+
+        const sender = await userModel
+          .findById(userId)
+          .select("username")
+          .lean();
+
+        notificationEvent.emit("new_message", {
+          recipientIds,
+          triggeredById: userId,
+          senderName: sender?.username ?? "Someone",
+          roomId,
+          messageId: message._id,
+          contentPreview: content.trim().slice(0, 100),
+          roomName: room.type === "group" ? (room.name || null) : null,
+        });
+      } catch (err) {
+        log.warn({ err: err.message }, "new_message notification fan-out failed");
+      }
+    })();
   }
 
   const populated = await messageModel

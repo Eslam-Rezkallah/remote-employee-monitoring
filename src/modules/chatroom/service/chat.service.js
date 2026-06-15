@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import chatRoomModel, {
   chatRoomTypes,
 } from "../../../DB/Model/chatroom.model.js";
@@ -579,6 +580,48 @@ export const createGroup = asyncHandler(async (req, res, next) => {
     { res, data: { room: populated }, message: "Group chat created" },
     201,
   );
+});
+
+// GET /chat/rooms/browse — public channels the user has not yet joined
+// ─────────────────────────────────────────────────────────────
+export const browseChannels = asyncHandler(async (req, res, next) => {
+  const userId = req.user._id;
+  const { organizationId, search } = req.query;
+  const { page, limit, skip } = getPagination(req.query);
+
+  const matchStage = {
+    type: "channel",
+    isPrivate: false,
+    isDeleted: false,
+    members: { $ne: userId },
+  };
+  if (organizationId) {
+    matchStage.organizationId = mongoose.Types.ObjectId.isValid(organizationId)
+      ? new mongoose.Types.ObjectId(organizationId)
+      : null;
+  }
+  if (search) matchStage.name = { $regex: search, $options: "i" };
+
+  const [result] = await chatRoomModel.aggregate([
+    { $match: matchStage },
+    {
+      $facet: {
+        channels: [
+          { $addFields: { memberCount: { $size: "$members" } } },
+          { $project: { name: 1, description: 1, type: 1, isPrivate: 1, icon: 1, memberCount: 1, organizationId: 1, createdAt: 1 } },
+          { $sort: { createdAt: -1 } },
+          { $skip: skip },
+          { $limit: limit },
+        ],
+        total: [{ $count: "n" }],
+      },
+    },
+  ]);
+
+  const channels = result?.channels ?? [];
+  const total = result?.total?.[0]?.n ?? 0;
+
+  return successResponse({ res, data: { channels, total, page, limit } });
 });
 
 // GET /chat/rooms  — UPDATED: embeds unread counts per room
